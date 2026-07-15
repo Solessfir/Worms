@@ -9,10 +9,11 @@
 
 namespace
 {
-    constexpr float KeyboardPadSpeed = 2000.f;
-    constexpr float BallLaunchVelocity = 1000.f;
-    constexpr float BallRadius = 18.f;
-    constexpr int Lives = 3;
+    constexpr float BlastRadius = 90.f;
+    constexpr float BlastMaxDamage = 60.f;
+    constexpr float SettleDuration = 0.6f;
+    constexpr float TrajectoryTimeStep = 0.03f;
+    constexpr int TrajectoryPoints = 40;
 
     constexpr float FieldAspect = 4.f / 3.f;
     float VirtualHeight = 900.f;                    // overwritten from the monitor in main()
@@ -59,31 +60,72 @@ namespace
             || (IsGamepadAvailable(0) && IsGamepadButtonPressed(0, GAMEPAD_BUTTON_RIGHT_FACE_DOWN));
     }
 
-    void DrawHeart(const Vector2 Center, const float Size, const Color Tint)
+    std::string GetLevelPath(const GameState& State)
     {
-        const float Radius = Size * 0.25f;
-        DrawCircleV({.x = Center.x - Radius, .y = Center.y}, Radius, Tint);
-        DrawCircleV({.x = Center.x + Radius, .y = Center.y}, Radius, Tint);
-        DrawTriangle({.x = Center.x - 2.f * Radius, .y = Center.y}, {.x = Center.x, .y = Center.y + 2.4f * Radius}, {.x = Center.x + 2.f * Radius, .y = Center.y}, Tint);
+        (void)State;
+        #if RELEASE
+        return TextFormat("%sassets/levels/level_1.txt", GetApplicationDirectory());
+        #else
+        return "assets/levels/level_1.txt";
+        #endif
     }
 
-    float GetBallPadJiggleOffset(const GameState& State)
+    void StartMatch(GameState& State)
     {
-        constexpr float MaxJigglePx = 20.f;
-        constexpr float JiggleScale = 0.02f;
-        return std::clamp(State.Sim.Pad.VelocityX * JiggleScale, -MaxJigglePx, MaxJigglePx);
+        State.Particles.clear();
+        State.FloatingTexts.clear();
+        State.ShakeScale = 0.f;
+        State.Winner = -1;
+        State.Sim.CurrentPlayer = 0;
+        State.Sim.Phase = TurnPhase::Aiming;
+        State.Sim.SettleTimer = 0.f;
+        State.Sim.Shot.Active = false;
+
+        const std::string Path = GetLevelPath(State);
+        LoadLevelFromPath(State.Sim, Path.c_str(), State.Field.Width);
+
+        const float SpawnY = State.Field.Height * 0.5f;
+        State.Sim.Worms[0] = {
+            .Position = {.x = State.Field.Width * 0.2f, .y = SpawnY},
+            .Velocity = {},
+            .HP = Worm::MaxHP,
+            .Name = "Worm One",
+            .FacingDir = 1.f,
+            .OnGround = false,
+            .AimAngle = 0.f,
+            .Charging = false,
+            .ChargePower = 0.f,
+            .Alive = true,
+            .FlashSec = 0.f
+        };
+        State.Sim.Worms[1] = {
+            .Position = {.x = State.Field.Width * 0.8f, .y = SpawnY},
+            .Velocity = {},
+            .HP = Worm::MaxHP,
+            .Name = "Worm Two",
+            .FacingDir = -1.f,
+            .OnGround = false,
+            .AimAngle = 0.f,
+            .Charging = false,
+            .ChargePower = 0.f,
+            .Alive = true,
+            .FlashSec = 0.f
+        };
+
+        State.Screen = GameScreen::Game;
     }
 
-    void ResetMouseCursor(const GameState& State)
+    void RestartMatch(GameState& State)
     {
-        // Reset cursor to the Pad location. Otherwise, Pad will snap to the Cursor on the next Tick
-        // SetMousePosition takes raw window coords, so transform from virtual space
-        const ViewFit Fit = GetViewFit();
-        const float CursorX = State.Field.X + State.Sim.Pad.Position.x + State.Sim.Pad.Width * 0.5f;
-        SetMousePosition(static_cast<int>(CursorX * Fit.Scale), static_cast<int>((State.Field.Y + State.Sim.Pad.Position.y) * Fit.Scale));
+        StartMatch(State);
     }
 
-    Rectangle GetMenuItemRect(const GameState& State, const int Index, const int Count)
+    void ResetMainMenu(GameState& State, const GameScreen Screen)
+    {
+        State.Screen = Screen;
+    }
+
+    Rectangle GetMenuButtonRect(const GameState& State, const int Index, const int Count)
     {
         const float ItemW = State.Field.Width * 0.3f;
         const float ItemH = 52.f;
@@ -94,487 +136,169 @@ namespace
         return {.x = StartX + static_cast<float>(Index) * (ItemW + Gap), .y = Y, .width = ItemW, .height = ItemH};
     }
 
-    std::string GetLevelPath(const GameState& State)
+    bool IsButtonClicked(const GameState& State, const Rectangle& Rect)
     {
-        #if RELEASE
-        return TextFormat("%sassets/levels/level_%d.txt", GetApplicationDirectory(), State.CurrentLevel);
-        #else
-        return TextFormat("assets/levels/level_%d.txt", State.CurrentLevel);
-        #endif
+        const Vector2 Local = {.x = static_cast<float>(GetMouseX()) - State.Field.X, .y = static_cast<float>(GetMouseY()) - State.Field.Y};
+        return IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && CheckCollisionPointRec(Local, Rect);
     }
 
-    void LaunchBall(GameState& State)
+    void UpdateMenu(GameState& State)
     {
-        std::vector<Ball*> IdleBalls;
-        for (Ball& Ball : State.Sim.Balls)
+        if (State.Screen == GameScreen::MainMenu)
         {
-            // Spawned Multiballs can have Caught = false, but attached to the Pad (not moving)
-            const float BallSpeedSquared = Ball.Velocity.x * Ball.Velocity.x + Ball.Velocity.y * Ball.Velocity.y;
-            if (Ball.Caught || BallSpeedSquared < 1.f)
+            if (IsButtonClicked(State, GetMenuButtonRect(State, 0, 2)))
             {
-                IdleBalls.push_back(&Ball);
+                StopMusicStream(MenuMusic);
+                PlayMusicStream(GameplayMusic);
+                StartMatch(State);
+            }
+            else if (IsButtonClicked(State, GetMenuButtonRect(State, 1, 2)))
+            {
+                ResetMainMenu(State, GameScreen::Options);
             }
         }
-
-        if (IdleBalls.empty())
+        else // Options
         {
-            return;
-        }
-
-        // If Multiball: Spread Balls so they don't all move the same direction
-        constexpr float HorizontalSpread = 150.f;
-        for (size_t i = 0; i < IdleBalls.size(); ++i)
-        {
-            Ball& Ball = *IdleBalls[i];
-            Ball.Caught = false;
-            const float Offset = static_cast<float>(i) - static_cast<float>(IdleBalls.size() - 1) * 0.5f;
-            Ball.Velocity = {.x = Offset * HorizontalSpread, .y = -BallLaunchVelocity};
-        }
-
-        State.Sim.BallLaunched = true;
-    }
-
-    void SpawnBallTrail(GameState& State)
-    {
-        constexpr float TrailLifetime = 0.15f;
-        constexpr float TrailAlpha = 0.025f;
-
-        for (const Ball& Ball : State.Sim.Balls)
-        {
-            if (Ball.Caught)
+            if (IsButtonClicked(State, GetMenuButtonRect(State, 0, 2)))
             {
-                continue;
+                ResetMainMenu(State, GameScreen::MainMenu);
             }
-
-            State.Particles.push_back({
-                .Position = Ball.Position,
-                .Velocity = {},
-                .Tint = ColorAlpha(RAYWHITE, TrailAlpha),
-                .InitialRadius = Ball.Radius,
-                .Lifetime = TrailLifetime,
-                .MaxLifetime = TrailLifetime
-            });
-        }
-    }
-
-    void SpawnPowerupDrop(GameState& State, const Vector2 Center)
-    {
-        // This could be the last Brick alive (BricksDestroyed already has this kill)
-        // No drop then - level clears and the Powerup would be unreachable
-        if (State.Sim.BricksDestroyed >= State.Sim.TotalInteractiveBricks)
-        {
-            return;
-        }
-
-        // Early game is super boring, so we increase drop chance, and decrease it closer to the End game
-        constexpr int DropChanceEarly = 40;
-        constexpr int DropChanceLate = 8;
-
-        // Force a Drop if none for a long time, or hold back if Drops come too fast
-        constexpr double DropMinDuration = 0.5;
-        constexpr double DropMaxDuration = 5.0;
-        const double SinceLastDrop = GetTime() - State.Sim.LastDropTime;
-
-        constexpr float DropWidth = 42.f;
-        constexpr float DropHeight = 42.f;
-
-        float Progress = 0.f;
-        if (State.Sim.TotalInteractiveBricks > 0)
-        {
-            Progress = static_cast<float>(State.Sim.BricksDestroyed) / static_cast<float>(State.Sim.TotalInteractiveBricks);
-        }
-
-        int DropChancePercent = static_cast<int>(DropChanceEarly + (DropChanceLate - DropChanceEarly) * Progress);
-
-        if (SinceLastDrop > DropMaxDuration)
-        {
-            DropChancePercent = 100;
-        }
-        else if (SinceLastDrop <= DropMinDuration)
-        {
-            DropChancePercent = 0;
-        }
-
-        if (GetRandomValue(0, 99) < DropChancePercent)
-        {
-            State.Sim.LastDropTime = GetTime();
-            const PowerupType Type = static_cast<PowerupType>(GetRandomValue(0, static_cast<int>(PowerupType::Count) - 1));
-            State.Drops.push_back({
-                .Position = {.x = Center.x - DropWidth * 0.5f, .y = Center.y - DropHeight * 0.5f},
-                .Width = DropWidth,
-                .Height = DropHeight,
-                .Type = Type
-            });
-        }
-    }
-
-    void StartLevel(GameState& State)
-    {
-        State.Sim.Balls.clear();
-        State.Sim.Balls.push_back(MakeBall({.x = State.Field.Width * 0.5f, .y = State.Field.Height * 0.5f}, {}, BallRadius));
-        State.Sim.BricksDestroyed = 0;
-        State.Sim.LastDropTime = GetTime();
-        State.Sim.BallSpeedMultiplier = 1.f;
-        State.Sim.BallLaunched = false;
-        State.Sim.LaserActive = false;
-        State.Sim.LaserCooldownSec = 0.f;
-        State.Sim.CatchActive = false;
-        State.Sim.ThroughActive = false;
-        State.Sim.ProtectionActive = false;
-        State.Drops.clear();
-        State.Particles.clear();
-        State.ActiveEffects.clear();
-        State.FloatingTexts.clear();
-        State.Sim.Lasers.clear();
-        State.ShakeScale = 0.f;
-        State.LevelIntroSec = GameState::LevelIntroDuration;
-        State.Screen = GameScreen::Game;
-
-        // Center Pad and Mouse Cursor
-        State.Sim.Pad.Position.x = (State.Field.Width - State.Sim.Pad.Width) * 0.5f;
-        ResetMouseCursor(State);
-
-        const std::string Path = GetLevelPath(State);
-        LoadLevelFromPath(State.Sim, Path.c_str(), State.Field.Width);
-
-        // Show Level Name every new Level
-        const Vector2 BannerPos = {.x = State.Field.Width * 0.5f, .y = State.Field.Height * 0.45f};
-        SpawnFloatingText(State.FloatingTexts, BannerPos, TextFormat("LEVEL %d", State.CurrentLevel), GOLD, 128, GameState::LevelIntroDuration, false);
-    }
-
-    void RestartGame(GameState& State)
-    {
-        State.CurrentLevel = 1;
-        State.Sim.Lives = Lives;
-        State.Sim.Score = 0;
-        State.Sim.Combo = 0;
-        StartLevel(State);
-    }
-
-    void LoadNextLevel(GameState& State)
-    {
-        ++State.CurrentLevel;
-        const std::string Path = GetLevelPath(State);
-
-        if (!FileExists(Path.c_str()))
-        {
-            State.Screen = GameScreen::Victory;
-            StopMusicStream(GameplayMusic);
-            PlayMusicStream(VictoryMusic);
-            return;
-        }
-
-        StartLevel(State);
-    }
-
-    void ResetMainMenu(GameState& State, const GameScreen Screen)
-    {
-        const float BaseWidth = GetBasePadWidth(State);
-        State.Sim.Pad.Width = BaseWidth;
-        State.Sim.Pad.Position.y = State.Field.Height - 28.f;
-        State.Sim.Pad.Position.x = std::clamp(State.Sim.Pad.Position.x, 0.f, State.Field.Width - BaseWidth);
-        State.Sim.Balls.clear();
-        State.Sim.Balls.push_back(MakeBall({.x = State.Sim.Pad.Position.x + BaseWidth * 0.5f, .y = State.Sim.Pad.Position.y - BallRadius}, {}, BallRadius));
-        State.Sim.BallLaunched = false;
-        State.Sim.BallSpeedMultiplier = 1.f;
-        State.Sim.BricksDestroyed = 0;
-        State.Sim.TotalInteractiveBricks = 0;
-        State.LevelIntroSec = 0.f;
-        State.Screen = Screen;
-    }
-
-    bool BounceOffRect(GameState& State, const Rectangle& Rect)
-    {
-        bool Hit = false;
-        for (Ball& Ball : State.Sim.Balls)
-        {
-            Hit |= TryResolveBallRectCollision(Ball, Rect);
-        }
-        return Hit;
-    }
-
-    void UpdateMenu(GameState& State, const float DeltaTime)
-    {
-        if (State.Sim.BallLaunched)
-        {
-            constexpr int SubSteps = 3;
-            const float SubDt = DeltaTime / static_cast<float>(SubSteps);
-            static std::vector<Vector2> DeadBalls;
-
-            for (int Step = 0; Step < SubSteps; ++Step)
-            {
-                UpdateBall(State.Sim, SubDt);
-
-                if (UpdateBallWallCollision(State.Sim, State.Field.Width, State.Field.Height, DeadBalls))
-                {
-                    PlaySfx(GetRandomHitSound());
-                }
-
-                if (State.Sim.Balls.empty())
-                {
-                    // We can't lose in Main Menu - reset the Ball
-                    ResetMainMenu(State, State.Screen);
-                    break;
-                }
-
-                if (UpdateBallPadCollision(State.Sim))
-                {
-                    PlaySfx(PadHitSound);
-                }
-
-                if (State.Screen == GameScreen::MainMenu)
-                {
-                    if (BounceOffRect(State, GetMenuItemRect(State, 0, 2)))
-                    {
-                        PlaySfx(GetRandomHitSound());
-                        SpawnParticles(State.Particles, State.Sim.Balls[0].Position, SKYBLUE, 32);
-                        StopMusicStream(MenuMusic);
-                        PlayMusicStream(GameplayMusic);
-                        RestartGame(State); // Start the game
-                        break;
-                    }
-
-                    if (BounceOffRect(State, GetMenuItemRect(State, 1, 2)))
-                    {
-                        PlaySfx(GetRandomHitSound());
-                        SpawnParticles(State.Particles, State.Sim.Balls[0].Position, SKYBLUE, 32);
-                        ResetMainMenu(State, GameScreen::Options);
-                        break;
-                    }
-                }
-                else // Options
-                {
-                    // Keyboard control
-                    if (BounceOffRect(State, GetMenuItemRect(State, 0, 2)))
-                    {
-                        PlaySfx(GetRandomHitSound());
-                        SpawnParticles(State.Particles, State.Sim.Balls[0].Position, SKYBLUE, 32);
-                        State.MouseControl = false;
-                        ResetMainMenu(State, GameScreen::MainMenu);
-                        break;
-                    }
-
-                    // Mouse control
-                    if (BounceOffRect(State, GetMenuItemRect(State, 1, 2)))
-                    {
-                        PlaySfx(GetRandomHitSound());
-                        SpawnParticles(State.Particles, State.Sim.Balls[0].Position, SKYBLUE, 32);
-                        State.MouseControl = true;
-                        ResetMouseCursor(State);
-                        ResetMainMenu(State, GameScreen::MainMenu);
-                        break;
-                    }
-                }
-            }
-
-            if (State.Screen == GameScreen::MainMenu || State.Screen == GameScreen::Options)
-            {
-                UpdateBallSpeed(State.Sim, BallLaunchVelocity);
-                UpdatePad(State.Sim, DeltaTime, State.Field.Width, State.Field.X, KeyboardPadSpeed, State.MouseControl);
-                SpawnBallTrail(State);
-            }
-        }
-        else
-        {
-            Ball& Ball = State.Sim.Balls[0];
-            Ball.Position.x = State.Sim.Pad.Position.x + State.Sim.Pad.Width * 0.5f - GetBallPadJiggleOffset(State);
-            Ball.Position.y = State.Sim.Pad.Position.y - Ball.Radius - 1.f;
-            UpdatePad(State.Sim, DeltaTime, State.Field.Width, State.Field.X, KeyboardPadSpeed, State.MouseControl);
-        }
-
-        if (ConfirmPressed())
-        {
-            LaunchBall(State);
         }
     }
 
     void UpdateGameplay(GameState& State, const float DeltaTime)
     {
-        if (State.Sim.BallLaunched)
+        SimState& Sim = State.Sim;
+
+        for (int i = 0; i < 2; ++i)
         {
-            Paddle& Pad = State.Sim.Pad;
-            constexpr int SubSteps = 3;
-            const float SubDt = DeltaTime / static_cast<float>(SubSteps);
+            const bool AcceptInput = (Sim.Phase == TurnPhase::Aiming) && (i == Sim.CurrentPlayer);
+            UpdateWorm(Sim.Worms[i], Sim.Terrain, DeltaTime, State.Field.Width, State.Field.Height, AcceptInput);
 
-            static std::vector<int> BrickHits;
-            static std::vector<Vector2> DeadBalls;
-
-            for (int i = 0; i < SubSteps; ++i)
+            if (CheckWormBelowField(Sim.Worms[i], State.Field.Height))
             {
-                UpdateBall(State.Sim, SubDt);
+                SpawnParticles(State.Particles, Sim.Worms[i].Position, RAYWHITE, 24);
+            }
+        }
 
-                const bool WasShield = State.Sim.ProtectionActive;
-                if (UpdateBallWallCollision(State.Sim, State.Field.Width, State.Field.Height, DeadBalls))
+        if (Sim.Phase == TurnPhase::Aiming)
+        {
+            Worm& Active = Sim.Worms[Sim.CurrentPlayer];
+            const Vector2 MousePos = GetMousePosition();
+
+            Vector2 FireVelocity{};
+            if (UpdateWormAim(Active, MousePos, DeltaTime, FireVelocity))
+            {
+                Sim.Shot.Position = Active.Position;
+                Sim.Shot.Velocity = FireVelocity;
+                Sim.Shot.Active = true;
+                Sim.Phase = TurnPhase::Firing;
+            }
+        }
+        else if (Sim.Phase == TurnPhase::Firing)
+        {
+            UpdateProjectile(Sim.Shot, DeltaTime);
+
+            bool Exploded = false;
+            Vector2 ExplodeAt{};
+
+            if (Sim.Shot.Active)
+            {
+                for (const TerrainBlock& Block : Sim.Terrain)
                 {
-                    PlaySfx(GetRandomHitSound());
-
-                    if (WasShield && !State.Sim.ProtectionActive)
+                    if (!Block.Alive)
                     {
-                        for (ActiveEffect& Effect : State.ActiveEffects)
+                        continue;
+                    }
+                    const Rectangle BlockRect = {.x = Block.Position.x, .y = Block.Position.y, .width = Block.Width, .height = Block.Height};
+                    if (CheckCollisionCircleRec(Sim.Shot.Position, Projectile::Radius, BlockRect))
+                    {
+                        Exploded = true;
+                        break;
+                    }
+                }
+
+                if (!Exploded)
+                {
+                    for (const Worm& W : Sim.Worms)
+                    {
+                        if (!W.Alive)
                         {
-                            if (Effect.Type == PowerupType::Protection)
-                            {
-                                Effect.TimeLeft = 0.f;
-                                break;
-                            }
+                            continue;
+                        }
+                        if (CheckCollisionCircles(Sim.Shot.Position, Projectile::Radius, W.Position, Worm::Radius))
+                        {
+                            Exploded = true;
+                            break;
                         }
                     }
                 }
 
-                for (const Vector2& Pos : DeadBalls)
+                if (!Exploded && (Sim.Shot.Position.x < -50.f || Sim.Shot.Position.x > State.Field.Width + 50.f || Sim.Shot.Position.y > State.Field.Height + 50.f))
                 {
-                    SpawnParticles(State.Particles, Pos, RAYWHITE, 32);
-                    State.ShakeScale = std::min(1.f, State.ShakeScale + 0.6f);
+                    Sim.Shot.Active = false;
+                    Sim.Phase = TurnPhase::Settling;
+                    Sim.SettleTimer = SettleDuration;
                 }
 
-                const bool CatchWasActive = State.Sim.CatchActive;
-                if (UpdateBallPadCollision(State.Sim))
+                if (Exploded)
                 {
-                    PlaySfx(PadHitSound);
+                    ExplodeAt = Sim.Shot.Position;
+                    Sim.Shot.Active = false;
 
-                    // Reset Catch Powerup
-                    if (CatchWasActive && !State.Sim.CatchActive)
+                    const ExplosionResult Result = ApplyExplosionDamage(Sim, ExplodeAt, BlastRadius, static_cast<int>(BlastMaxDamage));
+                    SpawnParticles(State.Particles, ExplodeAt, ORANGE, 40);
+                    State.ShakeScale = std::min(1.f, State.ShakeScale + 0.7f);
+
+                    for (const int WormIndex : Result.HitWormIndices)
                     {
-                        for (ActiveEffect& Effect : State.ActiveEffects)
-                        {
-                            if (Effect.Type == PowerupType::Catch)
-                            {
-                                Effect.TimeLeft = 0.f;
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                UpdateBallBrickCollision(State.Sim, BrickHits);
-
-                for (const int HitIndex : BrickHits)
-                {
-                    PlaySfx(GetRandomHitSound());
-
-                    const Brick& HitBrick = State.Sim.Bricks[HitIndex];
-                    const Vector2 Center = {.x = HitBrick.Position.x + HitBrick.Width * 0.5f, .y = HitBrick.Position.y + HitBrick.Height * 0.5f};
-                    SpawnParticles(State.Particles, Center, HitBrick.Tint, HitBrick.Alive ? 4 : 32);
-
-                    if (!HitBrick.Alive)
-                    {
-                        SpawnPowerupDrop(State, Center);
-                        State.ShakeScale = std::min(1.f, State.ShakeScale + 0.25f);
-                    }
-                }
-
-                // Show Combo Text
-                const int Combo = State.Sim.Combo;
-                if (!BrickHits.empty() && (Combo == 5 || (Combo > 0 && Combo % 10 == 0)))
-                {
-                    Color TextColor = RAYWHITE;
-                    int FontSize = 42;
-                    float Lifetime = 1.5f;
-                    const char* Label = "COMBO";
-
-                    if (Combo >= 100)
-                    {
-                        TextColor = RED;
-                        FontSize = 58;
-                        Lifetime = 2.2f;
-                        Label = "UNSTOPPABLE";
-                    }
-                    else if (Combo >= 50)
-                    {
-                        TextColor = ORANGE;
-                        FontSize = 52;
-                        Lifetime = 2.0f;
-                        Label = "INSANE";
-                    }
-                    else if (Combo >= 10)
-                    {
-                        TextColor = YELLOW;
-                        FontSize = 48;
-                        Lifetime = 1.7f;
-                        Label = "NICE";
+                        const Worm& W = Sim.Worms[WormIndex];
+                        const float Distance = Vector2Distance(ExplodeAt, W.Position);
+                        const float DamageScale = std::clamp(1.f - std::max(0.f, Distance - Worm::Radius) / BlastRadius, 0.f, 1.f);
+                        const int Damage = static_cast<int>(BlastMaxDamage * DamageScale);
+                        SpawnFloatingText(State.FloatingTexts, {.x = W.Position.x, .y = W.Position.y - 40.f}, TextFormat("-%d", Damage), RED, 32, 1.2f, true);
                     }
 
-                    const Brick& Brick = State.Sim.Bricks[BrickHits.back()];
-                    const Vector2 Position = {.x = Brick.Position.x + Brick.Width * 0.5f, .y = Brick.Position.y + Brick.Height * 0.5f};
-                    SpawnFloatingText(State.FloatingTexts, Position, TextFormat("x%d %s!", Combo, Label), TextColor, FontSize, Lifetime, true);
+                    Sim.Phase = TurnPhase::Settling;
+                    Sim.SettleTimer = SettleDuration;
                 }
             }
-
-            UpdateBallSpeed(State.Sim, BallLaunchVelocity);
-            UpdatePad(State.Sim, DeltaTime, State.Field.Width, State.Field.X, KeyboardPadSpeed, State.MouseControl);
-
-            // Tick Pad flash effect
-            if (Pad.FlashSec > 0.f)
+        }
+        else // Settling
+        {
+            Sim.SettleTimer -= DeltaTime;
+            if (Sim.SettleTimer <= 0.f)
             {
-                Pad.FlashSec -= DeltaTime;
-            }
-
-            // Catch Powerup: Attach caught Balls to the Pad
-            const float PadCenterX = Pad.Position.x + Pad.Width * 0.5f;
-            for (Ball& Ball : State.Sim.Balls)
-            {
-                if (Ball.Caught)
+                if (!Sim.Worms[0].Alive)
                 {
-                    const float MinX = Pad.Position.x + Ball.Radius;
-                    const float MaxX = Pad.Position.x + Pad.Width - Ball.Radius;
-                    Ball.Position.x = std::clamp(PadCenterX + Ball.CaughtOffsetX, MinX, MaxX);
-                    Ball.Position.y = Pad.Position.y - Ball.Radius;
+                    State.Winner = 1;
+                }
+                else if (!Sim.Worms[1].Alive)
+                {
+                    State.Winner = 0;
+                }
+
+                if (State.Winner != -1)
+                {
+                    State.Screen = GameScreen::Victory;
+                    StopMusicStream(GameplayMusic);
+                    PlayMusicStream(VictoryMusic);
+                }
+                else
+                {
+                    Sim.CurrentPlayer = 1 - Sim.CurrentPlayer;
+                    Sim.Phase = TurnPhase::Aiming;
                 }
             }
-
-            SpawnBallTrail(State);
         }
-        else // idle state
+
+        // Tick dying terrain blocks
+        for (TerrainBlock& Block : Sim.Terrain)
         {
-            if (State.Sim.Balls.empty())
+            if (!Block.Alive && Block.DeathSec > 0.f)
             {
-                // Respawn after death
-                State.Sim.Balls.push_back(MakeBall({}, {}, BallRadius));
+                Block.DeathSec -= DeltaTime;
             }
-
-            UpdatePad(State.Sim, DeltaTime, State.Field.Width, State.Field.X, KeyboardPadSpeed, State.MouseControl);
-
-            // Catch Powerup: Attach all Balls to the Pad
-            const Paddle& Pad = State.Sim.Pad;
-            const float PadCenterX = Pad.Position.x + Pad.Width * 0.5f;
-
-            for (Ball& Ball : State.Sim.Balls)
-            {
-                Ball.Position.x = PadCenterX - GetBallPadJiggleOffset(State);
-                Ball.Position.y = Pad.Position.y - Ball.Radius;
-            }
-        }
-
-        #if DEBUG
-        if (IsKeyPressed(KEY_N))
-        {
-            LoadNextLevel(State);
-        }
-        #endif
-
-        if (State.LevelIntroSec > 0.f)
-        {
-            State.LevelIntroSec -= DeltaTime;
-        }
-
-        if (ConfirmPressed())
-        {
-            LaunchBall(State);
-        }
-
-        // Store Highest Score to display on the Game Over screen
-        State.HighestScore = std::max(State.HighestScore, State.Sim.Score);
-
-        // Level cleared / Game over
-        if (State.Sim.TotalInteractiveBricks > 0 && State.Sim.BricksDestroyed >= State.Sim.TotalInteractiveBricks)
-        {
-            LoadNextLevel(State);
-        }
-        else if (State.Sim.Lives <= 0)
-        {
-            State.Screen = GameScreen::GameOver;
-            StopMusicStream(GameplayMusic);
-            PlayMusicStream(GameOverMusic);
         }
     }
 
@@ -585,19 +309,11 @@ namespace
             return;
         }
 
-        if (State.Screen == GameScreen::GameOver)
-        {
-            StopMusicStream(GameOverMusic);
-            PlayMusicStream(GameplayMusic);
-            RestartGame(State);
-            return;
-        }
-
         if (State.Screen == GameScreen::Victory)
         {
             StopMusicStream(VictoryMusic);
-            PlayMusicStream(GameplayMusic);
-            RestartGame(State);
+            PlayMusicStream(MenuMusic);
+            ResetMainMenu(State, GameScreen::MainMenu);
         }
     }
 
@@ -606,106 +322,6 @@ namespace
         UpdateParticles(State.Particles, DeltaTime);
         UpdateFloatingTexts(State.FloatingTexts, DeltaTime);
         UpdateBackgroundParticles(State.BackgroundParticles, DeltaTime, State.Field.Width, State.Field.Height);
-
-        // Tick dying Bricks
-        for (Brick& Brick : State.Sim.Bricks)
-        {
-            if (!Brick.Alive && Brick.DeathSec > 0.f)
-            {
-                Brick.DeathSec -= DeltaTime;
-            }
-        }
-
-        if (State.Screen != GameScreen::Game)
-        {
-            // Game is not is progress - do not update anything
-            return;
-        }
-
-        // Tick falling Drops
-        static std::vector<PowerupType> CaughtPowerups;
-        static std::vector<Drop> MissedDrops;
-        UpdateDrops(State.Drops, State.Sim.Pad, DeltaTime, State.Field.Height, CaughtPowerups, MissedDrops);
-
-        // Tick Powerups
-        for (const PowerupType Type : CaughtPowerups)
-        {
-            const PowerupDef& Def = GetPowerupDefinition(Type);
-            const Vector2 PaddleTop = {.x = State.Sim.Pad.Position.x + State.Sim.Pad.Width * 0.5f, .y = State.Sim.Pad.Position.y};
-            SpawnParticles(State.Particles, PaddleTop, Def.Tint, 14);
-            PlaySfx(PowerupSound);
-
-            if (Def.Text[0] != '\0')
-            {
-                SpawnFloatingText(State.FloatingTexts, {.x = PaddleTop.x, .y = PaddleTop.y - 50.f}, Def.Text, Def.Tint, 42, 2.f, false);
-            }
-
-            if (Def.Duration > 0.f)
-            {
-                const auto FoundEffect = std::ranges::find_if(State.ActiveEffects, [Type](const ActiveEffect& E)
-                {
-                    return E.Type == Type;
-                });
-
-                if (FoundEffect != State.ActiveEffects.end())
-                {
-                    // Same effect durations stack
-                    FoundEffect->TimeLeft += Def.Duration;
-                }
-                else
-                {
-                    if (Def.Apply)
-                    {
-                        Def.Apply(State);
-                    }
-
-                    State.ActiveEffects.push_back({.Type = Type, .TimeLeft = Def.Duration});
-                }
-            }
-            else // Instant effects
-            {
-                if (Def.Apply)
-                {
-                    Def.Apply(State);
-                }
-            }
-        }
-
-        for (const Drop& MissedDrop : MissedDrops)
-        {
-            const Vector2 Center = {.x = MissedDrop.Position.x + MissedDrop.Width * 0.5f, .y = MissedDrop.Position.y + MissedDrop.Height * 0.5f};
-            SpawnParticles(State.Particles, Center, GetPowerupDefinition(MissedDrop.Type).Tint, 32);
-        }
-
-        // Tick Active Effects (picked up Powerups)
-        UpdateActiveEffects(State, DeltaTime);
-
-        // Laser
-        State.Sim.LaserCooldownSec -= DeltaTime;
-        if (State.Sim.LaserActive && State.Sim.LaserCooldownSec <= 0.f)
-        {
-            State.Sim.LaserCooldownSec = Laser::FireCooldown;
-            const Paddle& Pad = State.Sim.Pad;
-            State.Sim.Lasers.push_back({.Position = {.x = Pad.Position.x + 8.f, .y = Pad.Position.y}});
-            State.Sim.Lasers.push_back({.Position = {.x = Pad.Position.x + Pad.Width - 8.f, .y = Pad.Position.y}});
-
-            SetSoundPitch(LaserSound, GetRandomFloatValue(0.85f, 1.15f));
-            PlaySfx(LaserSound);
-        }
-
-        static std::vector<int> LaserHits;
-        UpdateLasers(State.Sim, DeltaTime, LaserHits);
-        for (const int HitIndex : LaserHits)
-        {
-            const Brick& Brick = State.Sim.Bricks[HitIndex];
-            const Vector2 Center = {.x = Brick.Position.x + Brick.Width * 0.5f, .y = Brick.Position.y + Brick.Height * 0.5f};
-            SpawnParticles(State.Particles, Center, Brick.Tint, Brick.Alive ? 4 : 32);
-
-            if (!Brick.Alive)
-            {
-                SpawnPowerupDrop(State, Center);
-            }
-        }
     }
 
     void UpdateFrame(GameState& State, const float DeltaTime)
@@ -722,15 +338,13 @@ namespace
 
         if (State.Screen == GameScreen::MainMenu || State.Screen == GameScreen::Options)
         {
-            UpdateMenu(State, DeltaTime);
+            UpdateMenu(State);
         }
-
-        // UpdateMenu above can set GameScreen::Game
-        if (State.Screen == GameScreen::Game)
+        else if (State.Screen == GameScreen::Game)
         {
             UpdateGameplay(State, DeltaTime);
         }
-        else if (State.Screen == GameScreen::GameOver || State.Screen == GameScreen::Victory)
+        else if (State.Screen == GameScreen::Victory)
         {
             HandleEndScreenInput(State);
         }
@@ -1183,7 +797,6 @@ int main()
     // ---------- Game Setup ----------
     GameState State{};
     State.Screen = GameScreen::MainMenu;
-    State.MouseControl = true;
 
     // Field size lives in virtual design units - window size never affects gameplay proportions.
     // Field.X/Y (centering inside the window) are re-derived every Tick in UpdateFrame,
@@ -1194,23 +807,7 @@ int main()
     State.Field.X = (InitialFit.ViewWidth - State.Field.Width) * 0.5f;
     State.Field.Y = (InitialFit.ViewHeight - State.Field.Height) * 0.5f;
 
-    const float PadWidth = GetBasePadWidth(State);
-    constexpr float PadHeight = 22.f;
-    constexpr float PadBottomOffset = 4.f;
-
-    // Spawn Pad in the Center
-    State.Sim.Pad =
-    {
-        .Position = {.x = State.Field.Width * 0.5f - PadWidth * 0.5f, .y = State.Field.Height - PadHeight + PadBottomOffset},
-        .VelocityX = 0.f,
-        .Width = PadWidth,
-        .Height = PadHeight,
-        .FlashSec = 0.f
-    };
-
-    // By default, we use Mouse control, so we need to center Cursor to the Pad, so Pad is not snapping to the current random Cursor position
-    ResetMouseCursor(State);
-
+    State.Winner = -1;
     ResetMainMenu(State, GameScreen::MainMenu);
     InitBackgroundParticles(State.BackgroundParticles, 150, State.Field.Width, State.Field.Height);
 
