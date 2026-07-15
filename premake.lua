@@ -71,7 +71,6 @@ project "Worms"
         "src/**.hpp",
         "src/**.cpp",
         "vendor/spdlog/**.h",
-        "vendor/doctest/**.h",
     }
 
     includedirs { "src" }
@@ -121,57 +120,6 @@ project "Worms"
 
     filter "configurations:Release"
         kind "WindowedApp"
-        defines { "RELEASE" }
-        runtime "Release"
-        optimize "On"
-        symbols "Off"
-
-project "Tests"
-    kind "ConsoleApp"
-    language "C++"
-    cppdialect "C++20"
-    staticruntime "off"
-
-    targetdir ("bin/" .. outputdir .. "/%{prj.name}")
-    objdir ("bin/" .. outputdir .. "/%{prj.name}/obj")
-
-    files { "tests/**.h", "tests/**.cpp", "src/**.h", "src/**.hpp", "src/**.cpp" }
-    removefiles { "src/Main.cpp" }
-
-    includedirs { "src" }
-    externalincludedirs { "vendor" }
-    dependson { "raylib" }
-
-    filter "system:windows"
-        systemversion "latest"
-        -- raylib and Win32 both define CloseWindow. NOGDI/NOUSER fix the compilation
-        -- /FORCE:MULTIPLE picks raylib's at link time, /IGNORE:4006 mutes the "second definition ignored" warning
-        -- https://github.com/raysan5/raylib/issues/729
-        defines { "NOGDI", "NOUSER" }
-        links { "raylib", "winmm" }
-        linkoptions { "/FORCE:MULTIPLE", "/IGNORE:4006" }
-        buildoptions {
-            "/EHsc",
-            "/Zc:preprocessor",
-            "/Zc:__cplusplus",
-            "/permissive-",
-            "/utf-8",
-        }
-
-    filter "system:linux"
-        links { "raylib", "GL", "m", "pthread", "dl", "rt" }
-        buildoptions {
-            "-Wall",
-            "-Wextra",
-            "-Wno-unused-parameter",
-        }
-
-    filter "configurations:Debug"
-        defines { "DEBUG" }
-        runtime "Debug"
-        symbols "On"
-
-    filter "configurations:Release"
         defines { "RELEASE" }
         runtime "Release"
         optimize "On"
