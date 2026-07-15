@@ -340,3 +340,96 @@ void UpdateWorm(Worm& W, const std::vector<TerrainBlock>& Terrain, const float D
     // PlayfieldHeight is intentionally not clamped here - falling below it is death, checked separately
     (void)PlayfieldHeight;
 }
+
+void UpdateProjectile(Projectile& Shot, const float DeltaTime)
+{
+    if (!Shot.Active)
+    {
+        return;
+    }
+
+    Shot.Velocity.y += WormGravity * DeltaTime;
+    Shot.Position.x += Shot.Velocity.x * DeltaTime;
+    Shot.Position.y += Shot.Velocity.y * DeltaTime;
+}
+
+ExplosionResult ApplyExplosionDamage(SimState& Sim, const Vector2 Center, const float Radius, const int MaxDamage)
+{
+    ExplosionResult Result;
+    Result.Center = Center;
+
+    for (int i = 0; i < static_cast<int>(Sim.Terrain.size()); ++i)
+    {
+        TerrainBlock& Block = Sim.Terrain[i];
+        if (!Block.Alive)
+        {
+            continue;
+        }
+
+        const Rectangle BlockRect = {.x = Block.Position.x, .y = Block.Position.y, .width = Block.Width, .height = Block.Height};
+        if (!CheckCollisionCircleRec(Center, Radius, BlockRect))
+        {
+            continue;
+        }
+
+        if (Block.HitsLeft != INT_MAX)
+        {
+            --Block.HitsLeft;
+            if (Block.HitsLeft <= 0)
+            {
+                Block.Alive = false;
+                Block.DeathSec = TerrainBlock::DeathDuration;
+            }
+        }
+
+        Result.HitTerrainIndices.push_back(i);
+    }
+
+    for (int i = 0; i < 2; ++i)
+    {
+        Worm& W = Sim.Worms[i];
+        if (!W.Alive)
+        {
+            continue;
+        }
+
+        const float Distance = Vector2Distance(Center, W.Position);
+        if (Distance > Radius + Worm::Radius)
+        {
+            continue;
+        }
+
+        const float FalloffDistance = std::max(0.f, Distance - Worm::Radius);
+        const float DamageScale = std::clamp(1.f - FalloffDistance / Radius, 0.f, 1.f);
+        const int Damage = static_cast<int>(static_cast<float>(MaxDamage) * DamageScale);
+
+        W.HP -= Damage;
+        W.FlashSec = Worm::FlashDuration;
+        if (W.HP <= 0)
+        {
+            W.HP = 0;
+            W.Alive = false;
+        }
+
+        Result.HitWormIndices.push_back(i);
+    }
+
+    return Result;
+}
+
+bool CheckWormBelowField(Worm& W, const float PlayfieldHeight)
+{
+    if (!W.Alive)
+    {
+        return false;
+    }
+
+    if (W.Position.y - Worm::Radius > PlayfieldHeight)
+    {
+        W.Alive = false;
+        W.HP = 0;
+        return true;
+    }
+
+    return false;
+}
