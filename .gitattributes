@@ -1,0 +1,19 @@
+# Normalize line endings; let Git decide text vs binary by default
+* text=auto
+
+# Shell scripts must stay LF or they break on Linux (CRLF in shebang = bad interpreter)
+*.sh text eol=lf
+
+# Windows scripts stay CRLF
+*.bat text eol=crlf
+
+# Premake binaries are not text - never touch them
+vendor/Premake/Linux/premake5 binary
+vendor/Premake/Windows/premake5.exe binary
+
+# Assets are binary
+*.png binary
+*.jpg binary
+*.mp3 binary
+*.wav binary
+*.ttf binary
