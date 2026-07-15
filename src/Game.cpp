@@ -180,3 +180,113 @@ void LoadLevelFromPath(SimState& Sim, const char* Path, const float PlayfieldWid
 
     spdlog::info("LoadLevelFromPath: {} terrain blocks loaded", Sim.Terrain.size());
 }
+
+namespace
+{
+    constexpr float WormGravity = 1400.f;
+    constexpr float WormWalkSpeed = 220.f;
+    constexpr float WormHopVelocity = -420.f;
+
+    // Pushes the Worm out of a single overlapping Rect. Unlike TryResolveBallRectCollision,
+    // this stops the Worm's velocity on the resolved axis instead of reflecting it (no bounce).
+    void ResolveWormRect(Worm& W, const Rectangle& Rect)
+    {
+        const Rectangle WormRect =
+        {
+            .x = W.Position.x - Worm::Radius,
+            .y = W.Position.y - Worm::Radius,
+            .width = Worm::Radius * 2.f,
+            .height = Worm::Radius * 2.f
+        };
+
+        if (!CheckCollisionRecs(WormRect, Rect))
+        {
+            return;
+        }
+
+        const float CenterX = Rect.x + Rect.width * 0.5f;
+        const float CenterY = Rect.y + Rect.height * 0.5f;
+
+        const float OverlapX = (Worm::Radius + Rect.width * 0.5f) - std::abs(W.Position.x - CenterX);
+        const float OverlapY = (Worm::Radius + Rect.height * 0.5f) - std::abs(W.Position.y - CenterY);
+
+        if (OverlapX < OverlapY)
+        {
+            if (W.Position.x < CenterX)
+            {
+                W.Position.x = Rect.x - Worm::Radius;
+            }
+            else
+            {
+                W.Position.x = Rect.x + Rect.width + Worm::Radius;
+            }
+            W.Velocity.x = 0.f;
+        }
+        else
+        {
+            if (W.Position.y < CenterY) // landed on top of the block
+            {
+                W.Position.y = Rect.y - Worm::Radius;
+                W.Velocity.y = 0.f;
+                W.OnGround = true;
+            }
+            else // hit the block from below
+            {
+                W.Position.y = Rect.y + Rect.height + Worm::Radius;
+                W.Velocity.y = 0.f;
+            }
+        }
+    }
+}
+
+void UpdateWorm(Worm& W, const std::vector<TerrainBlock>& Terrain, const float DeltaTime, const float PlayfieldWidth, const float PlayfieldHeight, const bool AcceptInput)
+{
+    if (!W.Alive)
+    {
+        return;
+    }
+
+    if (AcceptInput)
+    {
+        if (IsKeyDown(KEY_A) || IsKeyDown(KEY_LEFT))
+        {
+            W.Position.x -= WormWalkSpeed * DeltaTime;
+            W.FacingDir = -1.f;
+        }
+        if (IsKeyDown(KEY_D) || IsKeyDown(KEY_RIGHT))
+        {
+            W.Position.x += WormWalkSpeed * DeltaTime;
+            W.FacingDir = 1.f;
+        }
+        if (IsKeyPressed(KEY_SPACE) && W.OnGround)
+        {
+            W.Velocity.y = WormHopVelocity;
+            W.OnGround = false;
+        }
+    }
+
+    W.Velocity.y += WormGravity * DeltaTime;
+    W.Position.y += W.Velocity.y * DeltaTime;
+
+    W.OnGround = false;
+    for (const TerrainBlock& Block : Terrain)
+    {
+        if (!Block.Alive)
+        {
+            continue;
+        }
+
+        const Rectangle BlockRect = {.x = Block.Position.x, .y = Block.Position.y, .width = Block.Width, .height = Block.Height};
+        ResolveWormRect(W, BlockRect);
+    }
+
+    W.Position.x = std::clamp(W.Position.x, Worm::Radius, PlayfieldWidth - Worm::Radius);
+
+    if (W.FlashSec > 0.f)
+    {
+        W.FlashSec -= DeltaTime;
+    }
+
+    // PlayfieldHeight is intentionally not clamped here - falling below it is death, checked separately
+    (void)PlayfieldHeight;
+}
