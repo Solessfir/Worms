@@ -422,91 +422,105 @@ namespace
             constexpr Color DarkGray = {.r = 40, .g = 40, .b = 40, .a = 255};
             DrawRectangleLinesEx({.x = State.Field.X, .y = State.Field.Y, .width = State.Field.Width, .height = State.Field.Height}, 2.f, DarkGray);
 
-            // Draw Laser Projectiles
-            for (const Laser& Laser : State.Sim.Lasers)
+            // Draw Terrain Blocks
+            for (const TerrainBlock& Block : State.Sim.Terrain)
             {
-                DrawRectangleRec({.x = State.Field.X + Laser.Position.x - 2.f, .y = State.Field.Y + Laser.Position.y - 8.f, .width = 4.f, .height = 14.f}, ORANGE);
-            }
-
-            // Draw Balls
-            for (const Ball& Ball : State.Sim.Balls)
-            {
-                DrawCircleV({.x = State.Field.X + Ball.Position.x, .y = State.Field.Y + Ball.Position.y}, Ball.Radius, RAYWHITE);
-            }
-
-            // Draw Pad
-            const Vector2 PaddlePosition = {.x = State.Field.X + State.Sim.Pad.Position.x, .y = State.Field.Y + State.Sim.Pad.Position.y};
-            const Vector2 PaddleSize = {.x = State.Sim.Pad.Width, .y = State.Sim.Pad.Height};
-            constexpr Color PadColor = {.r = 80, .g = 140, .b = 255, .a = 255};
-
-            // Flash Pad on Ball hit
-            const float FlashAmount = std::clamp(State.Sim.Pad.FlashSec / Paddle::FlashDuration, 0.f, 1.f);
-            const Color DrawColor = ColorLerp(PadColor, WHITE, FlashAmount);
-
-            DrawRectangleRounded({.x = PaddlePosition.x, .y = PaddlePosition.y, .width = PaddleSize.x, .height = PaddleSize.y}, 0.5f, 8, DrawColor);
-
-            // Draw Protection Powerup
-            if (State.Sim.ProtectionActive)
-            {
-                constexpr float BarHeight = 5.f;
-                DrawRectangleRec({.x = State.Field.X, .y = State.Field.Y + State.Field.Height - BarHeight, .width = State.Field.Width, .height = BarHeight}, PINK);
-            }
-
-            // Draw Bricks
-            const float IntroProgress = 1.f - State.LevelIntroSec / GameState::LevelIntroDuration;
-            for (const Brick& Brick : State.Sim.Bricks)
-            {
-                // Skip fully-dead bricks
-                if (!Brick.Alive && Brick.DeathSec <= 0.f)
+                if (!Block.Alive && Block.DeathSec <= 0.f)
                 {
                     continue;
                 }
 
                 constexpr float Padding = 2.f;
-                const float FullW = Brick.Width - Padding * 2.f;
-                const float FullH = Brick.Height - Padding * 2.f;
-                const float CenterX = State.Field.X + Brick.Position.x + Brick.Width * 0.5f;
-                const float CenterY = State.Field.Y + Brick.Position.y + Brick.Height * 0.5f;
+                const float FullW = Block.Width - Padding * 2.f;
+                const float FullH = Block.Height - Padding * 2.f;
+                const float CenterX = State.Field.X + Block.Position.x + Block.Width * 0.5f;
+                const float CenterY = State.Field.Y + Block.Position.y + Block.Height * 0.5f;
 
-                float BrickScale;
-                Color BrickTint = Brick.Tint;
+                float BlockScale = 1.f;
+                Color BlockTint = Block.Tint;
 
-                if (Brick.Alive)
-                {
-                    // Brick Reveal Animation on every new Level. Reveal raws top to bottom
-                    const float RevealThreshold = Brick.Position.y / State.Field.Height;
-                    constexpr float RevealSpeed = 4.f;
-                    BrickScale = std::clamp((IntroProgress - RevealThreshold) * RevealSpeed, 0.f, 1.f);
-                    if (BrickScale <= 0.f)
-                    {
-                        continue;
-                    }
-                }
-                else // Play Brick Death anim
+                if (!Block.Alive)
                 {
                     constexpr float DeathMaxScale = 1.4f;
-                    const float Progress = 1.f - Brick.DeathSec / Brick::DeathDuration;
-                    BrickScale = Lerp(1.f, DeathMaxScale, Progress);
-                    BrickTint = ColorAlpha(BrickTint, 1.f - Progress);
+                    const float Progress = 1.f - Block.DeathSec / TerrainBlock::DeathDuration;
+                    BlockScale = Lerp(1.f, DeathMaxScale, Progress);
+                    BlockTint = ColorAlpha(BlockTint, 1.f - Progress);
                 }
 
-                const float DrawW = FullW * BrickScale;
-                const float DrawH = FullH * BrickScale;
-                DrawRectangleRounded({.x = CenterX - DrawW * 0.5f, .y = CenterY - DrawH * 0.5f, .width = DrawW, .height = DrawH}, 0.5f, 8, BrickTint);
+                const float DrawW = FullW * BlockScale;
+                const float DrawH = FullH * BlockScale;
+                DrawRectangleRounded({.x = CenterX - DrawW * 0.5f, .y = CenterY - DrawH * 0.5f, .width = DrawW, .height = DrawH}, 0.3f, 8, BlockTint);
             }
 
-            // Draw Powerup drops
-            for (const Drop& Drop : State.Drops)
+            // Draw aim trajectory preview for the active Worm
+            if (State.Sim.Phase == TurnPhase::Aiming)
             {
-                const PowerupDef& Def = GetPowerupDefinition(Drop.Type);
-                const float DrawX = State.Field.X + Drop.Position.x;
-                const float DrawY = State.Field.Y + Drop.Position.y;
-                DrawRectangleRounded({.x = DrawX, .y = DrawY, .width = Drop.Width, .height = Drop.Height}, 0.5f, 8, Def.Tint);
+                const Worm& Active = State.Sim.Worms[State.Sim.CurrentPlayer];
+                if (Active.Charging)
+                {
+                    const float Speed = Lerp(300.f, 1100.f, Active.ChargePower);
+                    const Vector2 PreviewVelocity = {.x = std::cosf(Active.AimAngle) * Speed, .y = std::sinf(Active.AimAngle) * Speed};
+                    const std::vector<Vector2> Points = SimulateTrajectory(Active.Position, PreviewVelocity, 0.03f, 40);
 
-                constexpr int SymbolFontSize = 32;
-                const char Symbol[2] = {Def.Symbol, '\0'};
-                const int SymbolWidth = MeasureText(Symbol, SymbolFontSize);
-                DrawText(Symbol, static_cast<int>(DrawX + (Drop.Width - static_cast<float>(SymbolWidth)) * 0.5f), static_cast<int>(DrawY + (Drop.Height - SymbolFontSize) * 0.5f), SymbolFontSize, BLACK);
+                    for (const Vector2& Point : Points)
+                    {
+                        DrawCircleV({.x = State.Field.X + Point.x, .y = State.Field.Y + Point.y}, 2.5f, ColorAlpha(RAYWHITE, 0.5f));
+                    }
+                }
+            }
+
+            // Draw Projectile
+            if (State.Sim.Shot.Active)
+            {
+                DrawCircleV({.x = State.Field.X + State.Sim.Shot.Position.x, .y = State.Field.Y + State.Sim.Shot.Position.y}, Projectile::Radius, ORANGE);
+            }
+
+            // Draw Worms
+            for (int i = 0; i < 2; ++i)
+            {
+                const Worm& W = State.Sim.Worms[i];
+                if (!W.Alive)
+                {
+                    continue;
+                }
+
+                const Vector2 DrawPos = {.x = State.Field.X + W.Position.x, .y = State.Field.Y + W.Position.y};
+
+                const float FlashAmount = std::clamp(W.FlashSec / Worm::FlashDuration, 0.f, 1.f);
+                const Color BaseColor = (i == 0) ? SKYBLUE : PINK;
+                const Color WormColor = ColorLerp(BaseColor, WHITE, FlashAmount);
+
+                DrawCircleV(DrawPos, Worm::Radius, WormColor);
+
+                if (i == State.Sim.CurrentPlayer && State.Sim.Phase == TurnPhase::Aiming)
+                {
+                    const Vector2 AimEnd = {.x = DrawPos.x + std::cosf(W.AimAngle) * (Worm::Radius + 16.f), .y = DrawPos.y + std::sinf(W.AimAngle) * (Worm::Radius + 16.f)};
+                    DrawLineEx(DrawPos, AimEnd, 3.f, RAYWHITE);
+
+                    if (W.Charging)
+                    {
+                        constexpr float BarWidth = 44.f;
+                        constexpr float BarHeight = 6.f;
+                        const Vector2 BarPos = {.x = DrawPos.x - BarWidth * 0.5f, .y = DrawPos.y - Worm::Radius - 40.f};
+                        DrawRectangleRec({.x = BarPos.x, .y = BarPos.y, .width = BarWidth, .height = BarHeight}, DARKGRAY);
+                        DrawRectangleRec({.x = BarPos.x, .y = BarPos.y, .width = BarWidth * W.ChargePower, .height = BarHeight}, ORANGE);
+                    }
+                }
+
+                // Name + HP bar
+                constexpr int NameFontSize = 16;
+                const int NameWidth = MeasureText(W.Name, NameFontSize);
+                const int NameX = static_cast<int>(DrawPos.x) - NameWidth / 2;
+                const int NameY = static_cast<int>(DrawPos.y - Worm::Radius - 34.f);
+                DrawText(W.Name, NameX, NameY, NameFontSize, RAYWHITE);
+
+                constexpr float HpBarWidth = 50.f;
+                constexpr float HpBarHeight = 6.f;
+                const float HpFrac = static_cast<float>(W.HP) / static_cast<float>(Worm::MaxHP);
+                const Color HpColor = ColorLerp(RED, GREEN, HpFrac);
+                const Vector2 HpBarPos = {.x = DrawPos.x - HpBarWidth * 0.5f, .y = DrawPos.y - Worm::Radius - 16.f};
+                DrawRectangleRec({.x = HpBarPos.x, .y = HpBarPos.y, .width = HpBarWidth, .height = HpBarHeight}, DARKGRAY);
+                DrawRectangleRec({.x = HpBarPos.x, .y = HpBarPos.y, .width = HpBarWidth * HpFrac, .height = HpBarHeight}, HpColor);
             }
 
             // Draw Hit Particles
@@ -576,22 +590,20 @@ namespace
                     DrawText(Text, static_cast<int>(State.Field.X + (State.Field.Width - static_cast<float>(MeasureText(Text, Size))) * 0.5f), static_cast<int>(State.Field.Y + State.Field.Height * FieldYFrac), Size, C);
                 };
 
-                constexpr Color LightBlue = PadColor;
-                constexpr Color DimGray = {.r = 80, .g = 80, .b = 80, .a = 255};
+                constexpr Color LightBlue = {.r = 80, .g = 140, .b = 255, .a = 255};
                 constexpr Color DimGold = {.r = 200, .g = 160, .b = 60, .a = 255};
 
-                DrawCentered("BREAKOUT", 128, 0.15f, RAYWHITE);
+                DrawCentered("WORMS", 128, 0.15f, RAYWHITE);
                 DrawCentered(State.Screen == GameScreen::MainMenu ? "MAIN MENU" : "OPTIONS", 64, 0.27f, DimGold);
 
                 if (State.Screen == GameScreen::MainMenu)
                 {
-                    DrawMenuItem(GetMenuItemRect(State, 0, 2), "NEW GAME", LightBlue);
-                    DrawMenuItem(GetMenuItemRect(State, 1, 2), "OPTIONS", LightBlue);
+                    DrawMenuItem(GetMenuButtonRect(State, 0, 2), "NEW GAME", LightBlue);
+                    DrawMenuItem(GetMenuButtonRect(State, 1, 2), "OPTIONS", LightBlue);
                 }
                 else
                 {
-                    DrawMenuItem(GetMenuItemRect(State, 0, 2), "KEYBOARD", State.MouseControl ? DimGray : LightBlue);
-                    DrawMenuItem(GetMenuItemRect(State, 1, 2), "MOUSE", State.MouseControl ? LightBlue : DimGray);
+                    DrawMenuItem(GetMenuButtonRect(State, 0, 2), "BACK", LightBlue);
                 }
             }
 
@@ -604,99 +616,14 @@ namespace
                 DrawText(FpsText, PillarCenterX - TextWidth / 2, 14, FpsFontSize, DimGray);
             }
 
-            if (State.Screen == GameScreen::Game || State.Screen == GameScreen::GameOver || State.Screen == GameScreen::Victory)
+            if (State.Screen == GameScreen::Game)
             {
-                // Level
-                {
-                    constexpr int LevelFontSize = 24;
-                    const char* LevelText = TextFormat("LVL %d", State.CurrentLevel);
-                    const int TextWidth = MeasureText(LevelText, LevelFontSize);
-                    constexpr Color DimGold = {.r = 200, .g = 160, .b = 60, .a = 255};
-                    DrawText(LevelText, PillarCenterX - TextWidth / 2, 48, LevelFontSize, DimGold);
-                }
-
-                // Score
-                {
-                    constexpr int ScoreFontSize = 38;
-                    const char* ScoreText = TextFormat("%d", State.Sim.Score);
-                    const int TextWidth = MeasureText(ScoreText, ScoreFontSize);
-                    DrawText(ScoreText, PillarCenterX - TextWidth / 2, 80, ScoreFontSize, RAYWHITE);
-                }
-
-                // Health
-                {
-                    constexpr float HeartSize = 28.f;
-                    constexpr float HeartSpacing = HeartSize * 1.4f;
-                    constexpr float RowSpacing = HeartSize * 1.4f;
-                    constexpr float BaseY = 134.f;
-                    constexpr int PerRow = 5;
-                    for (int i = 0; i < State.Sim.Lives; ++i)
-                    {
-                        const int Row = i / PerRow;
-                        const int Col = i % PerRow;
-                        const int HeartsThisRow = std::min(PerRow, State.Sim.Lives - Row * PerRow);
-                        const float RowWidth = static_cast<float>(HeartsThisRow) * HeartSpacing;
-                        const float StartX = static_cast<float>(PillarCenterX) - RowWidth * 0.5f + HeartSpacing * 0.5f;
-                        DrawHeart({.x = StartX + static_cast<float>(Col) * HeartSpacing, .y = BaseY + static_cast<float>(Row) * RowSpacing}, HeartSize, RED);
-                    }
-                }
-
-                // Right Side: Active Powerup Effects
-                {
-                    const int RightPillarCenterX = static_cast<int>((State.Field.X + State.Field.Width + static_cast<float>(ScreenWidth)) * 0.5f);
-                    constexpr float SlotSize = 44.f;
-                    constexpr float SlotSpacing = 62.f;
-                    constexpr float BarHeight = 6.f;
-                    constexpr float StartY = 24.f;
-                    constexpr int SymbolFontSize = 32;
-
-                    for (int i = 0; i < static_cast<int>(State.ActiveEffects.size()); ++i)
-                    {
-                        const ActiveEffect& Effect = State.ActiveEffects[i];
-                        const PowerupDef& Def = GetPowerupDefinition(Effect.Type);
-
-                        const float SlotY = StartY + static_cast<float>(i) * SlotSpacing;
-                        const float SlotX = static_cast<float>(RightPillarCenterX) - SlotSize * 0.5f;
-
-                        DrawRectangleRounded({.x = SlotX, .y = SlotY, .width = SlotSize, .height = SlotSize}, 0.5f, 8, Def.Tint);
-
-                        const char Symbol[2] = {Def.Symbol, '\0'};
-                        const int SymbolWidth = MeasureText(Symbol, SymbolFontSize);
-                        DrawText(Symbol, RightPillarCenterX - SymbolWidth / 2, static_cast<int>(SlotY + (SlotSize - SymbolFontSize) * 0.5f), SymbolFontSize, BLACK);
-
-                        const float FillRatio = std::clamp(Effect.TimeLeft / Def.Duration, 0.f, 1.f);
-                        DrawRectangleRec({.x = SlotX, .y = SlotY + SlotSize + 4.f, .width = SlotSize, .height = BarHeight}, DARKGRAY);
-                        DrawRectangleRec({.x = SlotX, .y = SlotY + SlotSize + 4.f, .width = SlotSize * FillRatio, .height = BarHeight}, Def.Tint);
-                    }
-                }
-            }
-
-            // Game Over overlay
-            if (State.Screen == GameScreen::GameOver)
-            {
-                DrawRectangle(0, 0, ScreenWidth, ScreenHeight, {.r = 0, .g = 0, .b = 0, .a = 160});
-
-                const char* OverText = "GAME OVER";
-                constexpr int OverSize = 96;
-                DrawText(OverText, ScreenWidth / 2 - MeasureText(OverText, OverSize) / 2, ScreenHeight / 2 - 170, OverSize, RAYWHITE);
-
-                const char* LevelNumberText = TextFormat("Level %d", State.CurrentLevel);
-                constexpr int LevelLineSize = 36;
+                constexpr int TurnFontSize = 32;
+                const Worm& Active = State.Sim.Worms[State.Sim.CurrentPlayer];
+                const char* TurnText = TextFormat("%s's Turn", Active.Name);
+                const int TextWidth = MeasureText(TurnText, TurnFontSize);
                 constexpr Color DimGold = {.r = 200, .g = 160, .b = 60, .a = 255};
-                DrawText(LevelNumberText, ScreenWidth / 2 - MeasureText(LevelNumberText, LevelLineSize) / 2, ScreenHeight / 2 - 40, LevelLineSize, DimGold);
-
-                const char* ScoreText = TextFormat("Score: %d", State.Sim.Score);
-                constexpr int ScoreTextSize = 44;
-                DrawText(ScoreText, ScreenWidth / 2 - MeasureText(ScoreText, ScoreTextSize) / 2, ScreenHeight / 2 + 16, ScoreTextSize, RAYWHITE);
-
-                const char* BestScoreText = TextFormat("Best: %d", State.HighestScore);
-                constexpr int BestScoreTextSize = 36;
-                DrawText(BestScoreText, ScreenWidth / 2 - MeasureText(BestScoreText, BestScoreTextSize) / 2, ScreenHeight / 2 + 72, BestScoreTextSize, DimGold);
-
-                const char* PromptText = "Confirm to Restart or Esc to Exit";
-                constexpr int PromptTextSize = 32;
-                constexpr Color DimGray = {.r = 180, .g = 180, .b = 180, .a = 255};
-                DrawText(PromptText, ScreenWidth / 2 - MeasureText(PromptText, PromptTextSize) / 2, ScreenHeight / 2 + 128, PromptTextSize, DimGray);
+                DrawText(TurnText, PillarCenterX - TextWidth / 2, 48, TurnFontSize, DimGold);
             }
 
             // Victory overlay
@@ -704,23 +631,15 @@ namespace
             {
                 DrawRectangle(0, 0, ScreenWidth, ScreenHeight, {.r = 0, .g = 0, .b = 0, .a = 160});
 
-                const char* WinText = "YOU WIN!";
+                const char* WinnerName = State.Sim.Worms[State.Winner].Name;
+                const char* WinText = TextFormat("%s WINS!", WinnerName);
                 constexpr int WinSize = 96;
-                DrawText(WinText, ScreenWidth / 2 - MeasureText(WinText, WinSize) / 2, ScreenHeight / 2 - 170, WinSize, GOLD);
+                DrawText(WinText, ScreenWidth / 2 - MeasureText(WinText, WinSize) / 2, ScreenHeight / 2 - 60, WinSize, GOLD);
 
-                const char* ScoreText = TextFormat("Score: %d", State.Sim.Score);
-                constexpr int ScoreTextSize = 44;
-                DrawText(ScoreText, ScreenWidth / 2 - MeasureText(ScoreText, ScoreTextSize) / 2, ScreenHeight / 2 - 30, ScoreTextSize, RAYWHITE);
-
-                const char* BestScoreText = TextFormat("Best: %d", State.HighestScore);
-                constexpr int BestScoreTextSize = 36;
-                constexpr Color DimGold = {.r = 200, .g = 160, .b = 60, .a = 255};
-                DrawText(BestScoreText, ScreenWidth / 2 - MeasureText(BestScoreText, BestScoreTextSize) / 2, ScreenHeight / 2 + 26, BestScoreTextSize, DimGold);
-
-                const char* PromptText = "Confirm to Play again or Esc to Exit";
+                const char* PromptText = "Confirm to return to Menu";
                 constexpr int PromptTextSize = 32;
                 constexpr Color DimGray = {.r = 180, .g = 180, .b = 180, .a = 255};
-                DrawText(PromptText, ScreenWidth / 2 - MeasureText(PromptText, PromptTextSize) / 2, ScreenHeight / 2 + 82, PromptTextSize, DimGray);
+                DrawText(PromptText, ScreenWidth / 2 - MeasureText(PromptText, PromptTextSize) / 2, ScreenHeight / 2 + 60, PromptTextSize, DimGray);
             }
             EndMode2D();
         }
