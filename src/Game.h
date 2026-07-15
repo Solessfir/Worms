@@ -16,61 +16,41 @@ enum class GameScreen : std::uint8_t
     MainMenu,
     Options,
     Game,
-    Pause,
-    GameOver,
     Victory
 };
 
-enum class PowerupType : std::uint8_t
+enum class TurnPhase : std::uint8_t
 {
-    // Buffs
-    Multiball,
-    ExtraLife,
-    WidePaddle,
-    SlowBall,
-    Laser,
-    Catch,
-    Through,
-    Protection,
-
-    // Debuffs
-    ShrinkPaddle,
-    FastBall,
-
-    Count
+    Aiming,
+    Firing,
+    Settling
 };
 
-struct Ball
+struct Worm
 {
     Vector2 Position;
     Vector2 Velocity;
-    float Radius;
-    bool Caught;
-    float CaughtOffsetX;
-    float HitStopSec;
-
-    // Global data
-    static constexpr float HitStopDuration = 0.04f;
-};
-
-struct Paddle
-{
-    Vector2 Position;
-    float VelocityX;
-    float Width;
-    float Height;
+    int HP;
+    char Name[16];
+    float FacingDir;
+    bool OnGround;
+    float AimAngle;
+    bool Charging;
+    float ChargePower;
+    bool Alive;
     float FlashSec;
 
     // Global data
-    static constexpr float FlashDuration = 0.12f;
+    static constexpr int MaxHP = 100;
+    static constexpr float FlashDuration = 0.15f;
+    static constexpr float Radius = 20.f;
 };
 
-struct Brick
+struct TerrainBlock
 {
     Vector2 Position;
     float Width;
     float Height;
-    int PointValue;
     int HitsLeft;
     bool Alive;
     float DeathSec;
@@ -78,6 +58,26 @@ struct Brick
 
     // Global data
     static constexpr float DeathDuration = 0.18f;
+};
+
+struct Projectile
+{
+    Vector2 Position;
+    Vector2 Velocity;
+    bool Active;
+
+    // Global data
+    static constexpr float Radius = 8.f;
+};
+
+struct SimState
+{
+    Worm Worms[2];
+    std::vector<TerrainBlock> Terrain;
+    Projectile Shot;
+    int CurrentPlayer;
+    TurnPhase Phase;
+    float SettleTimer;
 };
 
 struct Particle
@@ -88,41 +88,6 @@ struct Particle
     float InitialRadius;
     float Lifetime;
     float MaxLifetime;
-};
-
-struct Laser
-{
-    Vector2 Position;
-
-    // Global data
-    static constexpr float FireCooldown = 0.25f;
-};
-
-struct SimState // if you add new vars in here - do NOT forget to reset them in "StartLevel"
-{
-    int Lives;
-    int Score;
-    int Combo;
-
-    Paddle Pad;
-    std::vector<Ball> Balls;
-    std::vector<Brick> Bricks;
-
-    float BallSpeedMultiplier;
-    bool BallLaunched;
-
-    int TotalInteractiveBricks;
-    int BricksDestroyed;
-    double LastDropTime;
-
-    // Buffs/Debuffs
-    std::vector<Laser> Lasers;
-    float LaserCooldownSec;
-    bool LaserActive;
-
-    bool CatchActive;
-    bool ThroughActive;
-    bool ProtectionActive;
 };
 
 struct Playfield
@@ -139,33 +104,6 @@ struct BackgroundParticle
     float Speed;
     float Radius;
     float Alpha;
-};
-
-struct Drop
-{
-    Vector2 Position;
-    float Width;
-    float Height;
-    PowerupType Type;
-};
-
-// We use free func, so there is no point for std::function<void(GameState&)>
-using PowerupFn = void(*)(struct GameState&);
-
-struct PowerupDef
-{
-    char Symbol;
-    Color Tint;
-    float Duration;
-    const char* Text;
-    PowerupFn Apply;
-    PowerupFn Revert;
-};
-
-struct ActiveEffect
-{
-    PowerupType Type;
-    float TimeLeft;
 };
 
 struct FloatingText
@@ -186,40 +124,29 @@ struct GameState
     SimState Sim;
     std::vector<Particle> Particles;
     std::vector<BackgroundParticle> BackgroundParticles;
-    std::vector<Drop> Drops;
-    std::vector<ActiveEffect> ActiveEffects;
     std::vector<FloatingText> FloatingTexts;
     float ShakeScale;
-    float LevelIntroSec;
-    int HighestScore;
-    int CurrentLevel;
-    bool MouseControl;
-
-    // Global data
-    static constexpr float LevelIntroDuration = 0.75f;
+    int Winner; // -1 = no winner yet, otherwise 0 or 1
 };
 
-inline float GetBasePadWidth(const GameState& State)
+void UpdateWorm(Worm& W, const std::vector<TerrainBlock>& Terrain, const float DeltaTime, const float PlayfieldWidth, const float PlayfieldHeight, const bool AcceptInput);
+
+bool UpdateWormAim(Worm& W, const Vector2 MouseVirtualPos, const float DeltaTime, Vector2& OutFireVelocity);
+
+void UpdateProjectile(Projectile& Shot, const float DeltaTime);
+
+struct ExplosionResult
 {
-    constexpr float WidthFactor = 8.f;
-    return State.Field.Width / WidthFactor;
-}
+    std::vector<int> HitTerrainIndices;
+    std::vector<int> HitWormIndices;
+    Vector2 Center;
+};
 
-Ball MakeBall(Vector2 Position, Vector2 Velocity, float Radius, bool Caught = false, float CaughtOffsetX = 0.f);
+ExplosionResult ApplyExplosionDamage(SimState& Sim, const Vector2 Center, const float Radius, const int MaxDamage);
 
-void UpdateBall(SimState& Sim, const float DeltaTime);
+bool CheckWormBelowField(Worm& W, const float PlayfieldHeight);
 
-void UpdateBallSpeed(SimState& Sim, const float BaseSpeed);
-
-bool UpdateBallWallCollision(SimState& Sim, const float PlayfieldWidth, const float PlayfieldHeight, std::vector<Vector2>& OutDeadBalls);
-
-bool UpdateBallPadCollision(SimState& Sim);
-
-bool TryResolveBallRectCollision(Ball& Ball, const Rectangle& Rect);
-
-void UpdateBallBrickCollision(SimState& Sim, std::vector<int>& OutHitBricks);
-
-void UpdatePad(SimState& Sim, const float DeltaTime, const float PlayfieldWidth, const float PlayfieldOffsetX, const float PaddleSpeed, const bool MouseControl);
+std::vector<Vector2> SimulateTrajectory(const Vector2 Origin, const Vector2 Velocity, const float TimeStep, const int MaxPoints);
 
 void LoadLevelFromPath(SimState& Sim, const char* Path, const float PlayfieldWidth);
 
@@ -234,11 +161,3 @@ void UpdateFloatingTexts(std::vector<FloatingText>& Texts, const float DeltaTime
 void InitBackgroundParticles(std::vector<BackgroundParticle>& BackgroundParticles, const int Count, const float Width, const float Height);
 
 void UpdateBackgroundParticles(std::vector<BackgroundParticle>& BackgroundParticles, const float DeltaTime, const float Width, const float Height);
-
-const PowerupDef& GetPowerupDefinition(const PowerupType Type);
-
-void UpdateDrops(std::vector<Drop>& Drops, const Paddle& Pad, const float DeltaTime, const float PlayfieldHeight, std::vector<PowerupType>& OutCaught, std::vector<Drop>& OutMissed);
-
-void UpdateActiveEffects(GameState& State, const float DeltaTime);
-
-void UpdateLasers(SimState& Sim, const float DeltaTime, std::vector<int>& OutHitBricks);
