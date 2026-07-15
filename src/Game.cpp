@@ -239,6 +239,56 @@ namespace
     }
 }
 
+namespace
+{
+    constexpr float ShotMinSpeed = 300.f;
+    constexpr float ShotMaxSpeed = 1100.f;
+    constexpr float ChargeRatePerSec = 1.f; // full charge in 1 second
+}
+
+bool UpdateWormAim(Worm& W, const Vector2 MouseVirtualPos, const float DeltaTime, Vector2& OutFireVelocity)
+{
+    const Vector2 ToMouse = {.x = MouseVirtualPos.x - W.Position.x, .y = MouseVirtualPos.y - W.Position.y};
+    W.AimAngle = std::atan2f(ToMouse.y, ToMouse.x);
+
+    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT))
+    {
+        W.Charging = true;
+        W.ChargePower = std::min(1.f, W.ChargePower + ChargeRatePerSec * DeltaTime);
+        return false;
+    }
+
+    if (W.Charging && IsMouseButtonReleased(MOUSE_BUTTON_LEFT))
+    {
+        const float Speed = Lerp(ShotMinSpeed, ShotMaxSpeed, W.ChargePower);
+        OutFireVelocity = {.x = std::cosf(W.AimAngle) * Speed, .y = std::sinf(W.AimAngle) * Speed};
+        W.Charging = false;
+        W.ChargePower = 0.f;
+        return true;
+    }
+
+    return false;
+}
+
+std::vector<Vector2> SimulateTrajectory(const Vector2 Origin, const Vector2 Velocity, const float TimeStep, const int MaxPoints)
+{
+    std::vector<Vector2> Points;
+    Points.reserve(MaxPoints);
+
+    Vector2 Position = Origin;
+    Vector2 Vel = Velocity;
+
+    for (int i = 0; i < MaxPoints; ++i)
+    {
+        Vel.y += WormGravity * TimeStep;
+        Position.x += Vel.x * TimeStep;
+        Position.y += Vel.y * TimeStep;
+        Points.push_back(Position);
+    }
+
+    return Points;
+}
+
 void UpdateWorm(Worm& W, const std::vector<TerrainBlock>& Terrain, const float DeltaTime, const float PlayfieldWidth, const float PlayfieldHeight, const bool AcceptInput)
 {
     if (!W.Alive)
