@@ -5,7 +5,6 @@
 #include "raylib/raymath.h"
 #include "spdlog/spdlog.h"
 #include <algorithm>
-#include <ctime>
 #include <string>
 
 namespace
@@ -52,7 +51,9 @@ namespace
     {
         (void)State;
         constexpr int LevelCount = 3;
-        const int LevelIndex = GetRandomValue(1, LevelCount);
+        static int NextLevelIndex = 1;
+        const int LevelIndex = NextLevelIndex;
+        NextLevelIndex = (NextLevelIndex % LevelCount) + 1;
         #if RELEASE
         return TextFormat("%sassets/levels/level_%d.txt", GetApplicationDirectory(), LevelIndex);
         #else
@@ -676,7 +677,6 @@ int main()
     // Initial window size only - the view re-fits to the actual window/monitor every Tick
     InitWindow(1600, 900, "Worms");
     SetWindowMinSize(400, 225);
-    SetRandomSeed(static_cast<unsigned int>(time(nullptr)));
 
     const int Monitor = GetCurrentMonitor();
     const int RefreshRate = GetMonitorRefreshRate(Monitor);
