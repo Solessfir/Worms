@@ -185,10 +185,9 @@ namespace
 {
     constexpr float WormGravity = 1400.f;
     constexpr float WormWalkSpeed = 220.f;
-    constexpr float WormHopVelocity = -420.f;
+    constexpr float WormJumpVelocity = -420.f;
 
-    // Pushes the Worm out of a single overlapping Rect. Unlike TryResolveBallRectCollision,
-    // this stops the Worm's velocity on the resolved axis instead of reflecting it (no bounce).
+    // Pushes the Worm out of a single overlapping Rect.
     void ResolveWormRect(Worm& W, const Rectangle& Rect)
     {
         const Rectangle WormRect =
@@ -243,7 +242,7 @@ namespace
 {
     constexpr float ShotMinSpeed = 300.f;
     constexpr float ShotMaxSpeed = 1100.f;
-    constexpr float ChargeRatePerSec = 1.f; // full charge in 1 second
+    constexpr float ChargeRatePerSec = 1.f;
 }
 
 bool UpdateWormAim(Worm& W, const Vector2 MouseVirtualPos, const float DeltaTime, Vector2& OutFireVelocity)
@@ -310,7 +309,7 @@ void UpdateWorm(Worm& W, const std::vector<TerrainBlock>& Terrain, const float D
         }
         if (IsKeyPressed(KEY_SPACE) && W.OnGround)
         {
-            W.Velocity.y = WormHopVelocity;
+            W.Velocity.y = WormJumpVelocity;
             W.OnGround = false;
         }
     }
@@ -402,6 +401,10 @@ ExplosionResult ApplyExplosionDamage(SimState& Sim, const Vector2 Center, const 
         const float FalloffDistance = std::max(0.f, Distance - Worm::Radius);
         const float DamageScale = std::clamp(1.f - FalloffDistance / Radius, 0.f, 1.f);
         const int Damage = static_cast<int>(static_cast<float>(MaxDamage) * DamageScale);
+        if (Damage <= 0)
+        {
+            continue;
+        }
 
         W.HP -= Damage;
         W.FlashSec = Worm::FlashDuration;

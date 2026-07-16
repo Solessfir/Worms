@@ -36,7 +36,7 @@ Pre-built binaries available on the [Releases page](https://github.com/Solessfir
 * Mouse - aim
 * LMB (hold + release) - charge and fire
 * A/D - walk
-* Space - hop
+* Space - jump
 * `Esc` to exit
 
 ## Adding Custom Levels

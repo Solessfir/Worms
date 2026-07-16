@@ -150,7 +150,8 @@ namespace
 
             if (CheckWormBelowField(Sim.Worms[i], State.Field.Height))
             {
-                SpawnParticles(State.Particles, Sim.Worms[i].Position, RAYWHITE, 24);
+                const Color WormColor = i == 0 ? SKYBLUE : PINK;
+                SpawnParticles(State.Particles, Sim.Worms[i].Position, WormColor, 24);
             }
         }
 
@@ -256,6 +257,12 @@ namespace
                         const float DamageScale = std::clamp(1.f - std::max(0.f, Distance - Worm::Radius) / BlastRadius, 0.f, 1.f);
                         const int Damage = static_cast<int>(BlastMaxDamage * DamageScale);
                         SpawnFloatingText(State.FloatingTexts, {.x = W.Position.x, .y = W.Position.y - 40.f}, TextFormat("-%d", Damage), RED, 32, 1.2f, true);
+
+                        if (!W.Alive)
+                        {
+                            const Color WormColor = WormIndex == 0 ? SKYBLUE : PINK;
+                            SpawnParticles(State.Particles, W.Position, WormColor, 32);
+                        }
                     }
 
                     Sim.Phase = TurnPhase::Settling;
@@ -370,7 +377,7 @@ namespace
         const Vector2 DrawPos = {.x = Field.X + W.Position.x, .y = Field.Y + W.Position.y};
 
         const float FlashAmount = std::clamp(W.FlashSec / Worm::FlashDuration, 0.f, 1.f);
-        const Color BaseColor = (Index == 0) ? SKYBLUE : PINK;
+        const Color BaseColor = Index == 0 ? SKYBLUE : PINK;
         const Color WormColor = ColorLerp(BaseColor, WHITE, FlashAmount);
 
         // Body: squat pill shape instead of a bare circle
@@ -638,7 +645,7 @@ namespace
                 const Worm& Active = State.Sim.Worms[State.Sim.CurrentPlayer];
                 const char* TurnText = TextFormat("%s's Turn", Active.Name);
                 const int TextWidth = MeasureText(TurnText, TurnFontSize);
-                const Color TurnColor = (State.Sim.CurrentPlayer == 0) ? SKYBLUE : PINK;
+                const Color TurnColor = State.Sim.CurrentPlayer == 0 ? SKYBLUE : PINK;
                 DrawText(TurnText, PillarCenterX - TextWidth / 2, 48, TurnFontSize, TurnColor);
             }
 
