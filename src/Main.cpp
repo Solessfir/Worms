@@ -41,6 +41,7 @@ namespace
     Music MenuMusic;
     Music GameplayMusic;
     Music VictoryMusic;
+    Sound ExplosionSound;
 
     bool ConfirmPressed()
     {
@@ -185,17 +186,16 @@ namespace
         {
             UpdateProjectile(Sim.Shot, DeltaTime);
 
-            bool Exploded = false;
-            Vector2 ExplodeAt{};
-
             if (Sim.Shot.Active)
             {
+                bool Exploded = false;
                 for (const TerrainBlock& Block : Sim.Terrain)
                 {
                     if (!Block.Alive)
                     {
                         continue;
                     }
+
                     const Rectangle BlockRect = {.x = Block.Position.x, .y = Block.Position.y, .width = Block.Width, .height = Block.Height};
                     if (CheckCollisionCircleRec(Sim.Shot.Position, Projectile::Radius, BlockRect))
                     {
@@ -229,10 +229,11 @@ namespace
 
                 if (Exploded)
                 {
-                    ExplodeAt = Sim.Shot.Position;
+                    const Vector2 ExplodeAt = Sim.Shot.Position;
                     Sim.Shot.Active = false;
 
                     const ExplosionResult Result = ApplyExplosionDamage(Sim, ExplodeAt, BlastRadius, static_cast<int>(BlastMaxDamage));
+                    PlaySfx(ExplosionSound);
                     SpawnParticles(State.Particles, ExplodeAt, ORANGE, 40);
                     State.ShakeScale = std::min(1.f, State.ShakeScale + 0.7f);
 
@@ -694,15 +695,18 @@ int main()
     MenuMusic = LoadMusicStream("assets/audio/menu.mp3");
     GameplayMusic = LoadMusicStream("assets/audio/soundtrack.mp3");
     VictoryMusic = LoadMusicStream("assets/audio/victory.mp3");
+    ExplosionSound = LoadSound("assets/audio/explosion.mp3");
     #else
     MenuMusic = LoadMusicStream(TextFormat("%sassets/audio/menu.mp3", GetApplicationDirectory()));
     GameplayMusic = LoadMusicStream(TextFormat("%sassets/audio/soundtrack.mp3", GetApplicationDirectory()));
     VictoryMusic = LoadMusicStream(TextFormat("%sassets/audio/victory.mp3", GetApplicationDirectory()));
+    ExplosionSound = LoadSound(TextFormat("%sassets/audio/explosion.mp3", GetApplicationDirectory()));
     #endif
 
     SetMusicVolume(MenuMusic, 0.35f);
     SetMusicVolume(GameplayMusic, 0.35f);
     SetMusicVolume(VictoryMusic, 0.35f);
+    SetSoundVolume(ExplosionSound, 0.5f);
 
     PlayMusicStream(MenuMusic);
 
@@ -733,6 +737,7 @@ int main()
     UnloadMusicStream(MenuMusic);
     UnloadMusicStream(GameplayMusic);
     UnloadMusicStream(VictoryMusic);
+    UnloadSound(ExplosionSound);
     CloseAudioDevice();
     CloseWindow();
 }
