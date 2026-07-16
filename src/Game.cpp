@@ -288,7 +288,7 @@ std::vector<Vector2> SimulateTrajectory(const Vector2 Origin, const Vector2 Velo
     return Points;
 }
 
-void UpdateWorm(Worm& W, const std::vector<TerrainBlock>& Terrain, const float DeltaTime, const float PlayfieldWidth, const float PlayfieldHeight, const bool AcceptInput)
+void UpdateWorm(Worm& W, const std::vector<TerrainBlock>& Terrain, const float DeltaTime, const float PlayfieldWidth, const bool AcceptInput)
 {
     if (!W.Alive)
     {
@@ -335,9 +335,6 @@ void UpdateWorm(Worm& W, const std::vector<TerrainBlock>& Terrain, const float D
     {
         W.FlashSec -= DeltaTime;
     }
-
-    // PlayfieldHeight is intentionally not clamped here - falling below it is death, checked separately
-    (void)PlayfieldHeight;
 }
 
 void UpdateProjectile(Projectile& Shot, const float DeltaTime)

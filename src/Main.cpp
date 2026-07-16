@@ -47,9 +47,8 @@ namespace
         return IsMouseButtonPressed(MOUSE_BUTTON_LEFT) || IsKeyPressed(KEY_SPACE);
     }
 
-    std::string GetLevelPath(const GameState& State)
+    std::string GetLevelPath()
     {
-        (void)State;
         constexpr int LevelCount = 3;
         static int NextLevelIndex = 1;
         const int LevelIndex = NextLevelIndex;
@@ -72,7 +71,7 @@ namespace
         State.Sim.SettleTimer = 0.f;
         State.Sim.Shot.Active = false;
 
-        const std::string Path = GetLevelPath(State);
+        const std::string Path = GetLevelPath();
         LoadLevelFromPath(State.Sim, Path.c_str(), State.Field.Width, State.Field.Height);
 
         const float SpawnY = State.Field.Height * 0.5f;
@@ -146,7 +145,7 @@ namespace
         for (int i = 0; i < 2; ++i)
         {
             const bool AcceptInput = (Sim.Phase == TurnPhase::Aiming) && (i == Sim.CurrentPlayer);
-            UpdateWorm(Sim.Worms[i], Sim.Terrain, DeltaTime, State.Field.Width, State.Field.Height, AcceptInput);
+            UpdateWorm(Sim.Worms[i], Sim.Terrain, DeltaTime, State.Field.Width, AcceptInput);
 
             if (CheckWormBelowField(Sim.Worms[i], State.Field.Height))
             {

@@ -129,7 +129,7 @@ struct GameState
     bool WaitForMouseRelease; // true right after entering Game, until the menu/confirm click is released
 };
 
-void UpdateWorm(Worm& W, const std::vector<TerrainBlock>& Terrain, const float DeltaTime, const float PlayfieldWidth, const float PlayfieldHeight, const bool AcceptInput);
+void UpdateWorm(Worm& W, const std::vector<TerrainBlock>& Terrain, const float DeltaTime, const float PlayfieldWidth, const bool AcceptInput);
 
 bool UpdateWormAim(Worm& W, const Vector2 MouseVirtualPos, const float DeltaTime, Vector2& OutFireVelocity);
 
