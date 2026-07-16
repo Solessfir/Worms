@@ -1,7 +1,5 @@
 # Worms
 
-![](assets/preview.gif)
-
 ## Gameplay
 Local 2-player turn-based artillery game. Each player controls one Worm, aims with the mouse, charges shot power, and fires a projectile with gravity arc at the other Worm. Terrain blocks take damage and break apart from explosions. Last Worm standing wins.
 
@@ -44,11 +42,11 @@ New levels can be added to `assets/levels/level_#.txt`
 
 ### Example Format:
 ```
+
+R    R
 YYYYYY
 GGGGGG
 OOOOOO
-R    R
-WWWWWW
 ```
 
 * **G** - Green
