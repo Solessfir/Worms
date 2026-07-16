@@ -37,7 +37,7 @@ Pre-built binaries available on the [Releases page](https://github.com/Solessfir
 * LMB (hold + release) - charge and fire
 * A/D - walk
 * Space - hop
-* `Esc` to exit or Gamepad `Menu`
+* `Esc` to exit
 
 ## Adding Custom Levels
 New levels can be added to `assets/levels/level_#.txt`

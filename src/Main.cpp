@@ -44,9 +44,7 @@ namespace
 
     bool ConfirmPressed()
     {
-        return IsMouseButtonPressed(MOUSE_BUTTON_LEFT)
-            || IsKeyPressed(KEY_SPACE)
-            || (IsGamepadAvailable(0) && IsGamepadButtonPressed(0, GAMEPAD_BUTTON_RIGHT_FACE_DOWN));
+        return IsMouseButtonPressed(MOUSE_BUTTON_LEFT) || IsKeyPressed(KEY_SPACE);
     }
 
     std::string GetLevelPath(const GameState& State)
@@ -701,13 +699,6 @@ int main()
     // ---------- Main Loop ----------
     while (!WindowShouldClose())
     {
-        if (IsGamepadAvailable(0) && IsGamepadButtonPressed(0, GAMEPAD_BUTTON_MIDDLE_RIGHT))
-        {
-            // Gamepad should close the game too
-            // For Keyboard raylib::InitWindow sets: CORE.Input.Keyboard.exitKey = KEY_ESCAPE;
-            break;
-        }
-
         UpdateFrame(State, GetFrameTime());
         RenderFrame(State);
     }
