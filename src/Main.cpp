@@ -188,6 +188,17 @@ namespace
 
             if (Sim.Shot.Active)
             {
+                constexpr float TrailLifetime = 0.15f;
+                constexpr float TrailAlpha = 0.35f;
+                State.Particles.push_back({
+                    .Position = Sim.Shot.Position,
+                    .Velocity = {},
+                    .Tint = ColorAlpha(ORANGE, TrailAlpha),
+                    .InitialRadius = Projectile::Radius,
+                    .Lifetime = TrailLifetime,
+                    .MaxLifetime = TrailLifetime
+                });
+
                 bool Exploded = false;
                 for (const TerrainBlock& Block : Sim.Terrain)
                 {
