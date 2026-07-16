@@ -137,7 +137,7 @@ void LoadLevelFromPath(SimState& Sim, const char* Path, const float PlayfieldWid
 
     constexpr float WallMarginPx = 4.f;
     const float BlockWidth = (PlayfieldWidth - WallMarginPx * 2.f) / static_cast<float>(MaxCols);
-    const float BlockHeight = BlockWidth * 0.4f;
+    const float BlockHeight = BlockWidth;
     const float StartY = PlayfieldHeight - WallMarginPx - static_cast<float>(Lines.size()) * BlockHeight;
 
     Sim.Terrain.clear();

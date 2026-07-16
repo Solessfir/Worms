@@ -52,7 +52,7 @@ namespace
     std::string GetLevelPath(const GameState& State)
     {
         (void)State;
-        constexpr int LevelCount = 5;
+        constexpr int LevelCount = 3;
         const int LevelIndex = GetRandomValue(1, LevelCount);
         #if RELEASE
         return TextFormat("%sassets/levels/level_%d.txt", GetApplicationDirectory(), LevelIndex);
