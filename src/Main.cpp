@@ -5,6 +5,7 @@
 #include "raylib/raymath.h"
 #include "spdlog/spdlog.h"
 #include <algorithm>
+#include <ctime>
 #include <string>
 
 namespace
@@ -51,10 +52,12 @@ namespace
     std::string GetLevelPath(const GameState& State)
     {
         (void)State;
+        constexpr int LevelCount = 5;
+        const int LevelIndex = GetRandomValue(1, LevelCount);
         #if RELEASE
-        return TextFormat("%sassets/levels/level_1.txt", GetApplicationDirectory());
+        return TextFormat("%sassets/levels/level_%d.txt", GetApplicationDirectory(), LevelIndex);
         #else
-        return "assets/levels/level_1.txt";
+        return TextFormat("assets/levels/level_%d.txt", LevelIndex);
         #endif
     }
 
@@ -653,6 +656,7 @@ int main()
     // Initial window size only - the view re-fits to the actual window/monitor every Tick
     InitWindow(1600, 900, "Worms");
     SetWindowMinSize(400, 225);
+    SetRandomSeed(static_cast<unsigned int>(time(nullptr)));
 
     const int Monitor = GetCurrentMonitor();
     const int RefreshRate = GetMonitorRefreshRate(Monitor);
