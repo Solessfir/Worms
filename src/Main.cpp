@@ -346,6 +346,75 @@ namespace
         State.ShakeScale = std::max(0.f, State.ShakeScale - ShakeFalloffPerSec * DeltaTime);
     }
 
+    void DrawWorm(const Playfield& Field, const SimState& Sim, const int Index)
+    {
+        const Worm& W = Sim.Worms[Index];
+        if (!W.Alive)
+        {
+            return;
+        }
+
+        const Vector2 DrawPos = {.x = Field.X + W.Position.x, .y = Field.Y + W.Position.y};
+
+        const float FlashAmount = std::clamp(W.FlashSec / Worm::FlashDuration, 0.f, 1.f);
+        const Color BaseColor = (Index == 0) ? SKYBLUE : PINK;
+        const Color WormColor = ColorLerp(BaseColor, WHITE, FlashAmount);
+
+        // Body: squat pill shape instead of a bare circle
+        const float BodyW = Worm::Radius * 2.3f;
+        const float BodyH = Worm::Radius * 1.6f;
+        const Rectangle BodyRect = {.x = DrawPos.x - BodyW * 0.5f, .y = DrawPos.y - BodyH * 0.5f, .width = BodyW, .height = BodyH};
+        DrawRectangleRounded(BodyRect, 0.9f, 10, WormColor);
+
+        // Segment shading lines to break up the pill silhouette
+        const Color SegmentShade = ColorAlpha(BLACK, 0.18f);
+        DrawLineEx({.x = BodyRect.x + BodyW * 0.33f, .y = BodyRect.y + 4.f}, {.x = BodyRect.x + BodyW * 0.33f, .y = BodyRect.y + BodyH - 4.f}, 2.f, SegmentShade);
+        DrawLineEx({.x = BodyRect.x + BodyW * 0.66f, .y = BodyRect.y + 4.f}, {.x = BodyRect.x + BodyW * 0.66f, .y = BodyRect.y + BodyH - 4.f}, 2.f, SegmentShade);
+
+        // Eyes look toward the aim direction while active, otherwise toward facing direction
+        const bool IsActiveAimer = (Index == Sim.CurrentPlayer) && (Sim.Phase == TurnPhase::Aiming);
+        const float LookAngle = IsActiveAimer ? W.AimAngle : (W.FacingDir > 0.f ? 0.f : PI);
+        const float EyeOffsetX = W.FacingDir * Worm::Radius * 0.5f;
+        const Vector2 EyeCenter1 = {.x = DrawPos.x + EyeOffsetX - 6.f, .y = DrawPos.y - Worm::Radius * 0.35f};
+        const Vector2 EyeCenter2 = {.x = DrawPos.x + EyeOffsetX + 6.f, .y = DrawPos.y - Worm::Radius * 0.35f};
+        const Vector2 PupilOffset = {.x = std::cosf(LookAngle) * 2.2f, .y = std::sinf(LookAngle) * 2.2f};
+
+        DrawCircleV(EyeCenter1, 5.f, RAYWHITE);
+        DrawCircleV(EyeCenter2, 5.f, RAYWHITE);
+        DrawCircleV({.x = EyeCenter1.x + PupilOffset.x, .y = EyeCenter1.y + PupilOffset.y}, 2.3f, BLACK);
+        DrawCircleV({.x = EyeCenter2.x + PupilOffset.x, .y = EyeCenter2.y + PupilOffset.y}, 2.3f, BLACK);
+
+        if (IsActiveAimer)
+        {
+            const Vector2 AimEnd = {.x = DrawPos.x + std::cosf(W.AimAngle) * (Worm::Radius + 16.f), .y = DrawPos.y + std::sinf(W.AimAngle) * (Worm::Radius + 16.f)};
+            DrawLineEx(DrawPos, AimEnd, 3.f, RAYWHITE);
+
+            if (W.Charging)
+            {
+                constexpr float BarWidth = 44.f;
+                constexpr float BarHeight = 6.f;
+                const Vector2 BarPos = {.x = DrawPos.x - BarWidth * 0.5f, .y = DrawPos.y - Worm::Radius - 40.f};
+                DrawRectangleRec({.x = BarPos.x, .y = BarPos.y, .width = BarWidth, .height = BarHeight}, DARKGRAY);
+                DrawRectangleRec({.x = BarPos.x, .y = BarPos.y, .width = BarWidth * W.ChargePower, .height = BarHeight}, ORANGE);
+            }
+        }
+
+        // Name + HP bar
+        constexpr int NameFontSize = 16;
+        const int NameWidth = MeasureText(W.Name, NameFontSize);
+        const int NameX = static_cast<int>(DrawPos.x) - NameWidth / 2;
+        const int NameY = static_cast<int>(DrawPos.y - Worm::Radius - 34.f);
+        DrawText(W.Name, NameX, NameY, NameFontSize, RAYWHITE);
+
+        constexpr float HpBarWidth = 50.f;
+        constexpr float HpBarHeight = 6.f;
+        const float HpFrac = static_cast<float>(W.HP) / static_cast<float>(Worm::MaxHP);
+        const Color HpColor = ColorLerp(RED, GREEN, HpFrac);
+        const Vector2 HpBarPos = {.x = DrawPos.x - HpBarWidth * 0.5f, .y = DrawPos.y - Worm::Radius - 16.f};
+        DrawRectangleRec({.x = HpBarPos.x, .y = HpBarPos.y, .width = HpBarWidth, .height = HpBarHeight}, DARKGRAY);
+        DrawRectangleRec({.x = HpBarPos.x, .y = HpBarPos.y, .width = HpBarWidth * HpFrac, .height = HpBarHeight}, HpColor);
+    }
+
     void RenderFrame(const GameState& State)
     {
         // Everything below draws in virtual units, so "screen" = visible virtual area.
@@ -463,49 +532,7 @@ namespace
             // Draw Worms
             for (int i = 0; i < 2; ++i)
             {
-                const Worm& W = State.Sim.Worms[i];
-                if (!W.Alive)
-                {
-                    continue;
-                }
-
-                const Vector2 DrawPos = {.x = State.Field.X + W.Position.x, .y = State.Field.Y + W.Position.y};
-
-                const float FlashAmount = std::clamp(W.FlashSec / Worm::FlashDuration, 0.f, 1.f);
-                const Color BaseColor = (i == 0) ? SKYBLUE : PINK;
-                const Color WormColor = ColorLerp(BaseColor, WHITE, FlashAmount);
-
-                DrawCircleV(DrawPos, Worm::Radius, WormColor);
-
-                if (i == State.Sim.CurrentPlayer && State.Sim.Phase == TurnPhase::Aiming)
-                {
-                    const Vector2 AimEnd = {.x = DrawPos.x + std::cosf(W.AimAngle) * (Worm::Radius + 16.f), .y = DrawPos.y + std::sinf(W.AimAngle) * (Worm::Radius + 16.f)};
-                    DrawLineEx(DrawPos, AimEnd, 3.f, RAYWHITE);
-
-                    if (W.Charging)
-                    {
-                        constexpr float BarWidth = 44.f;
-                        constexpr float BarHeight = 6.f;
-                        const Vector2 BarPos = {.x = DrawPos.x - BarWidth * 0.5f, .y = DrawPos.y - Worm::Radius - 40.f};
-                        DrawRectangleRec({.x = BarPos.x, .y = BarPos.y, .width = BarWidth, .height = BarHeight}, DARKGRAY);
-                        DrawRectangleRec({.x = BarPos.x, .y = BarPos.y, .width = BarWidth * W.ChargePower, .height = BarHeight}, ORANGE);
-                    }
-                }
-
-                // Name + HP bar
-                constexpr int NameFontSize = 16;
-                const int NameWidth = MeasureText(W.Name, NameFontSize);
-                const int NameX = static_cast<int>(DrawPos.x) - NameWidth / 2;
-                const int NameY = static_cast<int>(DrawPos.y - Worm::Radius - 34.f);
-                DrawText(W.Name, NameX, NameY, NameFontSize, RAYWHITE);
-
-                constexpr float HpBarWidth = 50.f;
-                constexpr float HpBarHeight = 6.f;
-                const float HpFrac = static_cast<float>(W.HP) / static_cast<float>(Worm::MaxHP);
-                const Color HpColor = ColorLerp(RED, GREEN, HpFrac);
-                const Vector2 HpBarPos = {.x = DrawPos.x - HpBarWidth * 0.5f, .y = DrawPos.y - Worm::Radius - 16.f};
-                DrawRectangleRec({.x = HpBarPos.x, .y = HpBarPos.y, .width = HpBarWidth, .height = HpBarHeight}, DARKGRAY);
-                DrawRectangleRec({.x = HpBarPos.x, .y = HpBarPos.y, .width = HpBarWidth * HpFrac, .height = HpBarHeight}, HpColor);
+                DrawWorm(State.Field, State.Sim, i);
             }
 
             // Draw Hit Particles
