@@ -104,6 +104,7 @@ namespace
         };
 
         State.Screen = GameScreen::Game;
+        State.WaitForMouseRelease = true;
     }
 
     void ResetMainMenu(GameState& State, const GameScreen Screen)
@@ -130,25 +131,11 @@ namespace
 
     void UpdateMenu(GameState& State)
     {
-        if (State.Screen == GameScreen::MainMenu)
+        if (IsButtonClicked(State, GetMenuButtonRect(State, 0, 1)))
         {
-            if (IsButtonClicked(State, GetMenuButtonRect(State, 0, 2)))
-            {
-                StopMusicStream(MenuMusic);
-                PlayMusicStream(GameplayMusic);
-                StartMatch(State);
-            }
-            else if (IsButtonClicked(State, GetMenuButtonRect(State, 1, 2)))
-            {
-                ResetMainMenu(State, GameScreen::Options);
-            }
-        }
-        else // Options
-        {
-            if (IsButtonClicked(State, GetMenuButtonRect(State, 0, 2)))
-            {
-                ResetMainMenu(State, GameScreen::MainMenu);
-            }
+            StopMusicStream(MenuMusic);
+            PlayMusicStream(GameplayMusic);
+            StartMatch(State);
         }
     }
 
@@ -173,7 +160,12 @@ namespace
             Sim.SettleTimer = SettleDuration;
         }
 
-        if (Sim.Phase == TurnPhase::Aiming)
+        if (State.WaitForMouseRelease && IsMouseButtonUp(MOUSE_BUTTON_LEFT))
+        {
+            State.WaitForMouseRelease = false;
+        }
+
+        if (Sim.Phase == TurnPhase::Aiming && !State.WaitForMouseRelease)
         {
             Worm& Active = Sim.Worms[Sim.CurrentPlayer];
             const Vector2 MousePos = GetMousePosition();
@@ -308,8 +300,8 @@ namespace
         if (State.Screen == GameScreen::Victory)
         {
             StopMusicStream(VictoryMusic);
-            PlayMusicStream(MenuMusic);
-            ResetMainMenu(State, GameScreen::MainMenu);
+            PlayMusicStream(GameplayMusic);
+            StartMatch(State);
         }
     }
 
@@ -332,7 +324,7 @@ namespace
         // After this, GetMouseX/GetMousePosition return virtual coords everywhere
         SetMouseScale(1.f / Fit.Scale, 1.f / Fit.Scale);
 
-        if (State.Screen == GameScreen::MainMenu || State.Screen == GameScreen::Options)
+        if (State.Screen == GameScreen::MainMenu)
         {
             UpdateMenu(State);
         }
@@ -570,7 +562,7 @@ namespace
             // ---------- Menu / Text ----------
 
             // Menu overlay
-            if (State.Screen == GameScreen::MainMenu || State.Screen == GameScreen::Options)
+            if (State.Screen == GameScreen::MainMenu)
             {
                 auto DrawMenuItem = [&](const Rectangle& Rect, const char* Label, const Color ItemColor)
                 {
@@ -589,17 +581,8 @@ namespace
                 constexpr Color DimGold = {.r = 200, .g = 160, .b = 60, .a = 255};
 
                 DrawCentered("WORMS", 128, 0.15f, RAYWHITE);
-                DrawCentered(State.Screen == GameScreen::MainMenu ? "MAIN MENU" : "OPTIONS", 64, 0.27f, DimGold);
-
-                if (State.Screen == GameScreen::MainMenu)
-                {
-                    DrawMenuItem(GetMenuButtonRect(State, 0, 2), "NEW GAME", LightBlue);
-                    DrawMenuItem(GetMenuButtonRect(State, 1, 2), "OPTIONS", LightBlue);
-                }
-                else
-                {
-                    DrawMenuItem(GetMenuButtonRect(State, 0, 2), "BACK", LightBlue);
-                }
+                DrawCentered("MAIN MENU", 64, 0.27f, DimGold);
+                DrawMenuItem(GetMenuButtonRect(State, 0, 1), "NEW GAME", LightBlue);
             }
 
             // FPS
@@ -631,7 +614,7 @@ namespace
                 constexpr int WinSize = 96;
                 DrawText(WinText, ScreenWidth / 2 - MeasureText(WinText, WinSize) / 2, ScreenHeight / 2 - 60, WinSize, GOLD);
 
-                const char* PromptText = "Confirm to return to Menu";
+                const char* PromptText = "Confirm to play again";
                 constexpr int PromptTextSize = 32;
                 constexpr Color DimGray = {.r = 180, .g = 180, .b = 180, .a = 255};
                 DrawText(PromptText, ScreenWidth / 2 - MeasureText(PromptText, PromptTextSize) / 2, ScreenHeight / 2 + 60, PromptTextSize, DimGray);

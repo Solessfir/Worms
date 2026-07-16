@@ -14,7 +14,6 @@ inline float GetRandomFloatValue(const float Min, const float Max)
 enum class GameScreen : std::uint8_t
 {
     MainMenu,
-    Options,
     Game,
     Victory
 };
@@ -127,6 +126,7 @@ struct GameState
     std::vector<FloatingText> FloatingTexts;
     float ShakeScale;
     int Winner; // -1 = no winner yet, otherwise 0 or 1
+    bool WaitForMouseRelease; // true right after entering Game, until the menu/confirm click is released
 };
 
 void UpdateWorm(Worm& W, const std::vector<TerrainBlock>& Terrain, const float DeltaTime, const float PlayfieldWidth, const float PlayfieldHeight, const bool AcceptInput);
