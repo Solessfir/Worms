@@ -39,19 +39,7 @@ namespace
     // Audio
     Music MenuMusic;
     Music GameplayMusic;
-    Music GameOverMusic;
     Music VictoryMusic;
-    Sound PadHitSound;
-    Sound BrickAndWallHitSounds[3];
-    Sound PowerupSound;
-    Sound LaserSound;
-
-    const Sound& GetRandomHitSound()
-    {
-        static_assert(std::size(BrickAndWallHitSounds) > 0, "No hit sounds!");
-        constexpr int LastIndex = static_cast<int>(std::size(BrickAndWallHitSounds)) - 1;
-        return BrickAndWallHitSounds[GetRandomValue(0, LastIndex)];
-    }
 
     bool ConfirmPressed()
     {
@@ -115,11 +103,6 @@ namespace
         State.Screen = GameScreen::Game;
     }
 
-    void RestartMatch(GameState& State)
-    {
-        StartMatch(State);
-    }
-
     void ResetMainMenu(GameState& State, const GameScreen Screen)
     {
         State.Screen = Screen;
@@ -181,6 +164,12 @@ namespace
             }
         }
 
+        if (Sim.Phase == TurnPhase::Aiming && (!Sim.Worms[0].Alive || !Sim.Worms[1].Alive))
+        {
+            Sim.Phase = TurnPhase::Settling;
+            Sim.SettleTimer = SettleDuration;
+        }
+
         if (Sim.Phase == TurnPhase::Aiming)
         {
             Worm& Active = Sim.Worms[Sim.CurrentPlayer];
@@ -189,7 +178,11 @@ namespace
             Vector2 FireVelocity{};
             if (UpdateWormAim(Active, MousePos, DeltaTime, FireVelocity))
             {
-                Sim.Shot.Position = Active.Position;
+                constexpr float SpawnOffset = Worm::Radius + Projectile::Radius + 2.f;
+                Sim.Shot.Position = {
+                    .x = Active.Position.x + std::cosf(Active.AimAngle) * SpawnOffset,
+                    .y = Active.Position.y + std::sinf(Active.AimAngle) * SpawnOffset
+                };
                 Sim.Shot.Velocity = FireVelocity;
                 Sim.Shot.Active = true;
                 Sim.Phase = TurnPhase::Firing;
@@ -353,7 +346,6 @@ namespace
 
         UpdateMusicStream(MenuMusic);
         UpdateMusicStream(GameplayMusic);
-        UpdateMusicStream(GameOverMusic);
         UpdateMusicStream(VictoryMusic);
 
         // Tick Screen Shake falloff
@@ -460,7 +452,7 @@ namespace
                 {
                     const float Speed = Lerp(300.f, 1100.f, Active.ChargePower);
                     const Vector2 PreviewVelocity = {.x = std::cosf(Active.AimAngle) * Speed, .y = std::sinf(Active.AimAngle) * Speed};
-                    const std::vector<Vector2> Points = SimulateTrajectory(Active.Position, PreviewVelocity, 0.03f, 40);
+                    const std::vector<Vector2> Points = SimulateTrajectory(Active.Position, PreviewVelocity, TrajectoryTimeStep, TrajectoryPoints);
 
                     for (const Vector2& Point : Points)
                     {
@@ -689,29 +681,18 @@ int main()
     #if DEBUG
     MenuMusic = LoadMusicStream("assets/audio/menu.mp3");
     GameplayMusic = LoadMusicStream("assets/audio/soundtrack.mp3");
-    GameOverMusic = LoadMusicStream("assets/audio/gameover.mp3");
     VictoryMusic = LoadMusicStream("assets/audio/victory.mp3");
     #else
     MenuMusic = LoadMusicStream(TextFormat("%sassets/audio/menu.mp3", GetApplicationDirectory()));
     GameplayMusic = LoadMusicStream(TextFormat("%sassets/audio/soundtrack.mp3", GetApplicationDirectory()));
-    GameOverMusic = LoadMusicStream(TextFormat("%sassets/audio/gameover.mp3", GetApplicationDirectory()));
     VictoryMusic = LoadMusicStream(TextFormat("%sassets/audio/victory.mp3", GetApplicationDirectory()));
     #endif
 
     SetMusicVolume(MenuMusic, 0.35f);
     SetMusicVolume(GameplayMusic, 0.35f);
-    SetMusicVolume(GameOverMusic, 0.35f);
     SetMusicVolume(VictoryMusic, 0.35f);
 
     PlayMusicStream(MenuMusic);
-
-    // SFX
-    PadHitSound = LoadSound("assets/audio/hit1.mp3");
-    BrickAndWallHitSounds[0] = LoadSound("assets/audio/hit2.mp3");
-    BrickAndWallHitSounds[1] = LoadSound("assets/audio/hit3.mp3");
-    BrickAndWallHitSounds[2] = LoadSound("assets/audio/hit4.mp3");
-    PowerupSound = LoadSound("assets/audio/powerup.mp3");
-    LaserSound = LoadSound("assets/audio/laser.mp3");
 
     // ---------- Game Setup ----------
     GameState State{};
@@ -744,15 +725,8 @@ int main()
         RenderFrame(State);
     }
 
-    UnloadSound(PadHitSound);
-    UnloadSound(BrickAndWallHitSounds[0]);
-    UnloadSound(BrickAndWallHitSounds[1]);
-    UnloadSound(BrickAndWallHitSounds[2]);
-    UnloadSound(PowerupSound);
-    UnloadSound(LaserSound);
     UnloadMusicStream(MenuMusic);
     UnloadMusicStream(GameplayMusic);
-    UnloadMusicStream(GameOverMusic);
     UnloadMusicStream(VictoryMusic);
     CloseAudioDevice();
     CloseWindow();
