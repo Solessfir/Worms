@@ -75,6 +75,7 @@ namespace
         LoadLevelFromPath(State.Sim, Path.c_str(), State.Field.Width, State.Field.Height);
 
         const float SpawnY = State.Field.Height * 0.5f;
+
         State.Sim.Worms[0] = {
             .Position = {.x = State.Field.Width * 0.2f, .y = SpawnY},
             .Velocity = {},
@@ -88,6 +89,7 @@ namespace
             .Alive = true,
             .FlashSec = 0.f
         };
+
         State.Sim.Worms[1] = {
             .Position = {.x = State.Field.Width * 0.8f, .y = SpawnY},
             .Velocity = {},

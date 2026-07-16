@@ -7,6 +7,13 @@
 #include <string>
 #include <utility>
 
+namespace
+{
+    constexpr float ShotMinSpeed = 300.f;
+    constexpr float ShotMaxSpeed = 1100.f;
+    constexpr float ChargeRatePerSec = 1.f;
+}
+
 void SpawnParticles(std::vector<Particle>& Particles, const Vector2& Position, const Color& Tint, const int Count)
 {
     for (int i = 0; i < Count; ++i)
@@ -183,7 +190,7 @@ void LoadLevelFromPath(SimState& Sim, const char* Path, const float PlayfieldWid
 
 namespace
 {
-    constexpr float WormGravity = 1400.f;
+    constexpr float Gravity = 1400.f;
     constexpr float WormWalkSpeed = 220.f;
     constexpr float WormJumpVelocity = -420.f;
 
@@ -238,13 +245,6 @@ namespace
     }
 }
 
-namespace
-{
-    constexpr float ShotMinSpeed = 300.f;
-    constexpr float ShotMaxSpeed = 1100.f;
-    constexpr float ChargeRatePerSec = 1.f;
-}
-
 bool UpdateWormAim(Worm& W, const Vector2 MouseVirtualPos, const float DeltaTime, Vector2& OutFireVelocity)
 {
     const Vector2 ToMouse = {.x = MouseVirtualPos.x - W.Position.x, .y = MouseVirtualPos.y - W.Position.y};
@@ -279,7 +279,7 @@ std::vector<Vector2> SimulateTrajectory(const Vector2 Origin, const Vector2 Velo
 
     for (int i = 0; i < MaxPoints; ++i)
     {
-        Vel.y += WormGravity * TimeStep;
+        Vel.y += Gravity * TimeStep;
         Position.x += Vel.x * TimeStep;
         Position.y += Vel.y * TimeStep;
         Points.push_back(Position);
@@ -314,7 +314,7 @@ void UpdateWorm(Worm& W, const std::vector<TerrainBlock>& Terrain, const float D
         }
     }
 
-    W.Velocity.y += WormGravity * DeltaTime;
+    W.Velocity.y += Gravity * DeltaTime;
     W.Position.y += W.Velocity.y * DeltaTime;
 
     W.OnGround = false;
@@ -344,7 +344,7 @@ void UpdateProjectile(Projectile& Shot, const float DeltaTime)
         return;
     }
 
-    Shot.Velocity.y += WormGravity * DeltaTime;
+    Shot.Velocity.y += Gravity * DeltaTime;
     Shot.Position.x += Shot.Velocity.x * DeltaTime;
     Shot.Position.y += Shot.Velocity.y * DeltaTime;
 }
