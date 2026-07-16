@@ -73,7 +73,7 @@ namespace
         State.Sim.Shot.Active = false;
 
         const std::string Path = GetLevelPath(State);
-        LoadLevelFromPath(State.Sim, Path.c_str(), State.Field.Width);
+        LoadLevelFromPath(State.Sim, Path.c_str(), State.Field.Width, State.Field.Height);
 
         const float SpawnY = State.Field.Height * 0.5f;
         State.Sim.Worms[0] = {

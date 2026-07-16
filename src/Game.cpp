@@ -4,7 +4,6 @@
 #include <algorithm>
 #include <climits>
 #include <fstream>
-#include <iterator>
 #include <string>
 #include <utility>
 
@@ -108,7 +107,7 @@ void UpdateBackgroundParticles(std::vector<BackgroundParticle>& BackgroundPartic
     }
 }
 
-void LoadLevelFromPath(SimState& Sim, const char* Path, const float PlayfieldWidth)
+void LoadLevelFromPath(SimState& Sim, const char* Path, const float PlayfieldWidth, const float PlayfieldHeight)
 {
     std::ifstream File(Path);
     if (!File.is_open())
@@ -139,6 +138,7 @@ void LoadLevelFromPath(SimState& Sim, const char* Path, const float PlayfieldWid
     constexpr float WallMarginPx = 4.f;
     const float BlockWidth = (PlayfieldWidth - WallMarginPx * 2.f) / static_cast<float>(MaxCols);
     const float BlockHeight = BlockWidth * 0.4f;
+    const float StartY = PlayfieldHeight - WallMarginPx - static_cast<float>(Lines.size()) * BlockHeight;
 
     Sim.Terrain.clear();
     Sim.Terrain.reserve(Lines.size() * MaxCols);
@@ -167,7 +167,7 @@ void LoadLevelFromPath(SimState& Sim, const char* Path, const float PlayfieldWid
             }
 
             Sim.Terrain.push_back({
-                .Position = {.x = WallMarginPx + static_cast<float>(Col) * BlockWidth, .y = WallMarginPx + static_cast<float>(Row) * BlockHeight},
+                .Position = {.x = WallMarginPx + static_cast<float>(Col) * BlockWidth, .y = StartY + static_cast<float>(Row) * BlockHeight},
                 .Width = BlockWidth,
                 .Height = BlockHeight,
                 .HitsLeft = Hits,

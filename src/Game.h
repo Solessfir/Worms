@@ -148,7 +148,7 @@ bool CheckWormBelowField(Worm& W, const float PlayfieldHeight);
 
 std::vector<Vector2> SimulateTrajectory(const Vector2 Origin, const Vector2 Velocity, const float TimeStep, const int MaxPoints);
 
-void LoadLevelFromPath(SimState& Sim, const char* Path, const float PlayfieldWidth);
+void LoadLevelFromPath(SimState& Sim, const char* Path, const float PlayfieldWidth, const float PlayfieldHeight);
 
 void SpawnParticles(std::vector<Particle>& Particles, const Vector2& Position, const Color& Tint, const int Count);
 
