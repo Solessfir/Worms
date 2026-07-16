@@ -638,8 +638,8 @@ namespace
                 const Worm& Active = State.Sim.Worms[State.Sim.CurrentPlayer];
                 const char* TurnText = TextFormat("%s's Turn", Active.Name);
                 const int TextWidth = MeasureText(TurnText, TurnFontSize);
-                constexpr Color DimGold = {.r = 200, .g = 160, .b = 60, .a = 255};
-                DrawText(TurnText, PillarCenterX - TextWidth / 2, 48, TurnFontSize, DimGold);
+                const Color TurnColor = (State.Sim.CurrentPlayer == 0) ? SKYBLUE : PINK;
+                DrawText(TurnText, PillarCenterX - TextWidth / 2, 48, TurnFontSize, TurnColor);
             }
 
             // Victory overlay
