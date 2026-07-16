@@ -341,6 +341,15 @@ namespace
         // After this, GetMouseX/GetMousePosition return virtual coords everywhere
         SetMouseScale(1.f / Fit.Scale, 1.f / Fit.Scale);
 
+        if (State.Screen == GameScreen::Game && !IsCursorHidden())
+        {
+            HideCursor();
+        }
+        else if (State.Screen != GameScreen::Game && IsCursorHidden())
+        {
+            ShowCursor();
+        }
+
         if (State.Screen == GameScreen::MainMenu)
         {
             UpdateMenu(State);
@@ -407,15 +416,6 @@ namespace
         {
             const Vector2 AimEnd = {.x = DrawPos.x + std::cosf(W.AimAngle) * (Worm::Radius + 16.f), .y = DrawPos.y + std::sinf(W.AimAngle) * (Worm::Radius + 16.f)};
             DrawLineEx(DrawPos, AimEnd, 3.f, RAYWHITE);
-
-            if (W.Charging)
-            {
-                constexpr float BarWidth = 44.f;
-                constexpr float BarHeight = 6.f;
-                const Vector2 BarPos = {.x = DrawPos.x - BarWidth * 0.5f, .y = DrawPos.y - Worm::Radius - 40.f};
-                DrawRectangleRec({.x = BarPos.x, .y = BarPos.y, .width = BarWidth, .height = BarHeight}, DARKGRAY);
-                DrawRectangleRec({.x = BarPos.x, .y = BarPos.y, .width = BarWidth * W.ChargePower, .height = BarHeight}, ORANGE);
-            }
         }
 
         // Name + HP bar
@@ -432,6 +432,14 @@ namespace
         const Vector2 HpBarPos = {.x = DrawPos.x - HpBarWidth * 0.5f, .y = DrawPos.y - Worm::Radius - 16.f};
         DrawRectangleRec({.x = HpBarPos.x, .y = HpBarPos.y, .width = HpBarWidth, .height = HpBarHeight}, DARKGRAY);
         DrawRectangleRec({.x = HpBarPos.x, .y = HpBarPos.y, .width = HpBarWidth * HpFrac, .height = HpBarHeight}, HpColor);
+
+        if (IsActiveAimer && W.Charging)
+        {
+            constexpr float ChargeBarHeight = HpBarHeight * 0.5f;
+            const Vector2 ChargeBarPos = {.x = HpBarPos.x, .y = HpBarPos.y + HpBarHeight + 2.f};
+            DrawRectangleRec({.x = ChargeBarPos.x, .y = ChargeBarPos.y, .width = HpBarWidth, .height = ChargeBarHeight}, DARKGRAY);
+            DrawRectangleRec({.x = ChargeBarPos.x, .y = ChargeBarPos.y, .width = HpBarWidth * W.ChargePower, .height = ChargeBarHeight}, ORANGE);
+        }
     }
 
     void RenderFrame(const GameState& State)
@@ -645,7 +653,8 @@ namespace
                 const char* TurnText = TextFormat("%s's Turn", Active.Name);
                 const int TextWidth = MeasureText(TurnText, TurnFontSize);
                 const Color TurnColor = State.Sim.CurrentPlayer == 0 ? SKYBLUE : PINK;
-                DrawText(TurnText, PillarCenterX - TextWidth / 2, 48, TurnFontSize, TurnColor);
+                const int FieldCenterX = static_cast<int>(State.Field.X + State.Field.Width * 0.5f);
+                DrawText(TurnText, FieldCenterX - TextWidth / 2, 48, TurnFontSize, TurnColor);
             }
 
             // Victory overlay
@@ -701,7 +710,6 @@ int main()
     // +1 px to not trigger Windows "fullscreen optimization"
     SetWindowSize(GetMonitorWidth(Monitor) + 1, GetMonitorHeight(Monitor) + 1);
     SetWindowPosition(0, 0);
-    HideCursor();
     #endif
 
     // ---------- Audio Setup ----------
