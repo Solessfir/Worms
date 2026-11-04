@@ -1,0 +1,34 @@
+name: Release
+
+on:
+  push:
+    tags: ["*"]
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: microsoft/setup-msbuild@v2
+      - run: vendor\Premake\Windows\premake5.exe --file=premake.lua vs2022
+        shell: cmd
+      - run: msbuild Worms.sln /p:Configuration=Release /p:Platform=x64 /m
+      - run: Compress-Archive -Path bin/Release-windows-x86_64/Worms/Worms.exe, bin/Release-windows-x86_64/Worms/assets -DestinationPath Worms_Win64.zip
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: Worms_Win64.zip
+
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y libgl1-mesa-dev libwayland-dev wayland-protocols libxkbcommon-dev
+      - run: ./Setup.sh
+      - run: make config=release -j$(nproc)
+      - run: tar -czf Worms_Linux_x86_64.tar.gz -C bin/Release-linux-x86_64/Worms Worms assets
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: Worms_Linux_x86_64.tar.gz

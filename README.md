@@ -24,6 +24,8 @@ Pre-built binaries available on the [Releases page](https://github.com/Solessfir
 2. Open `Worms.sln`
 3. Build
 
+`Setup.bat` generates VS2022 projects. With only VS2026 installed, generate them with `vendor\Premake\Windows\premake5.exe --file=premake.lua vs2026` instead, or build with `msbuild Worms.sln /p:Configuration=Release /p:Platform=x64 /p:PlatformToolset=v145`.
+
 ## Building on Linux
 1. Run `./Setup.sh`
 2. Debug build: `make config=debug -j$(nproc)`
