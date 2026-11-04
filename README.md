@@ -39,25 +39,39 @@ Pre-built binaries available on the [Releases page](https://github.com/Solessfir
 * **Windows:** `Worms_Win64.zip`
 * **Linux:** `Worms_Linux_x86_64.tar.gz`
 
-## Getting the Source
-Box2D is a submodule, so clone with `git clone --recursive https://github.com/Solessfir/Worms.git`, or run `git submodule update --init` in an existing clone.
+## Building from Source
 
-## Build Prerequisites
-- **Windows:** Visual Studio 2022 or higher
-- **Linux:** `g++`, `make`, `wayland-scanner`, plus GL + Wayland dev libraries (e.g. `libgl1-mesa-dev libwayland-dev wayland-protocols libxkbcommon-dev`)
+### 1. Clone with submodules
+Box2D is a git submodule, so clone recursively:
+```
+git clone --recursive https://github.com/Solessfir/Worms.git
+cd Worms
+```
+Already cloned without it? Run `git submodule update --init` inside the repo.
 
-## Building on Windows
-1. Run `Setup.bat`
-2. Open `Worms.sln`
-3. Build
+### 2a. Windows
+Requires Visual Studio 2022 or newer (or its Build Tools). Run these from a Developer PowerShell or Developer Command Prompt so `msbuild` is on the path:
+```
+Setup.bat
+msbuild Worms.sln /m /p:Configuration=Release /p:Platform=x64
+bin\Release-windows-x86_64\Worms\Worms.exe
+```
+Or open `Worms.sln` in Visual Studio or Rider and build there.
 
-`Setup.bat` generates VS2022 projects. With only VS2026 installed, generate them with `vendor\Premake\Windows\premake5.exe --file=premake.lua vs2026` instead, or build with `msbuild Worms.sln /p:Configuration=Release /p:Platform=x64 /p:PlatformToolset=v145`.
+`Setup.bat` generates VS2022 projects. With only VS2026 installed, either generate VS2026 projects with `vendor\Premake\Windows\premake5.exe --file=premake.lua vs2026`, or add `/p:PlatformToolset=v145` to the `msbuild` line.
 
-## Building on Linux
-1. Run `./Setup.sh`
-2. Debug build: `make config=debug -j$(nproc)`
-    * Release: `make -j$(nproc)`
-3. Run: `./bin/{Debug/Release}-linux-x86_64/Worms/Worms`
+### 2b. Linux
+Requires `g++`, `make`, `wayland-scanner`, plus GL and Wayland dev libraries. On Debian/Ubuntu:
+```
+sudo apt install build-essential libgl1-mesa-dev libwayland-dev wayland-protocols libxkbcommon-dev
+```
+Then:
+```
+./Setup.sh
+make config=release -j$(nproc)
+./bin/Release-linux-x86_64/Worms/Worms
+```
+Use `make config=debug` for a Debug build in `bin/Debug-linux-x86_64`.
 
 ## Controls
 * Mouse - aim
