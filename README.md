@@ -1,4 +1,6 @@
-# Worms
+<h1 align="center">Worms</h1>
+
+<p align="center"><img src="docs/preview.gif" alt="Gameplay preview"></p>
 
 ## Gameplay
 Local hot-seat, turn-based artillery game. Two teams of four worms take turns on a procedurally generated island. Each turn has a 45 s timer, random wind, and a few seconds to retreat after attacking. Worms take fall damage, drown in the water (or lava), and leave a gravestone when they die. The last team standing wins.
@@ -93,3 +95,6 @@ So these warnings are side effect of `/FORCE:MULTIPLE`
 
 ### Local raylib patch
 `winmm.lib` also exports `PlaySound`, and with `/FORCE:MULTIPLE` the linker can silently pick the Win32 one, which plays nothing. The vendored raylib adds `PlaySfx` (in `raudio.c` and `raylib.h`), and the game calls that instead of `PlaySound`. Re-apply this patch when updating raylib.
+
+## License
+Licensed under the [MIT License](LICENSE).
