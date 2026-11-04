@@ -101,7 +101,6 @@ project "Worms"
         "src/**.h",
         "src/**.hpp",
         "src/**.cpp",
-        "vendor/spdlog/**.h",
     }
 
     includedirs { "src" }

@@ -1,6 +1,5 @@
 ﻿#include "Game.h"
 #include "raylib/raymath.h"
-#include "spdlog/spdlog.h"
 #include <algorithm>
 #include <cmath>
 #include <utility>
@@ -1646,7 +1645,7 @@ void SpawnFloatingText(std::vector<FloatingText>& Texts, const Vector2 Position,
     // Ref: https://www.sandordargo.com/blog/2023/10/11/cpp20-intcmp-utilities
     if (WrittenBytes < 0 || std::cmp_greater_equal(WrittenBytes, sizeof(T.Text)))
     {
-        spdlog::warn("SpawnFloatingText: text '{}' truncated to {} chars", Text, sizeof(T.Text) - 1);
+        TraceLog(LOG_WARNING, "SpawnFloatingText: text '%s' truncated to %d chars", Text, static_cast<int>(sizeof(T.Text) - 1));
     }
 
     Texts.push_back(T);
@@ -1753,7 +1752,7 @@ void StartMatch(GameState& State, const std::uint32_t Seed, const BiomeKind Biom
         State.Camera.Target = Active->Position;
     }
 
-    spdlog::info("StartMatch: {} biome, seed {}", GetBiomeTheme(Biome).Name, Seed);
+    TraceLog(LOG_INFO, "StartMatch: %s biome, seed %u", GetBiomeTheme(Biome).Name, Seed);
 }
 
 void UpdateGameplay(GameState& State, const float DeltaTime)

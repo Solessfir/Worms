@@ -1,6 +1,6 @@
 <h1 align="center">Worms</h1>
 
-<p align="center"><img src="docs/preview.gif" alt="Gameplay preview"></p>
+<p align="center"><img src="preview.gif" alt="Gameplay preview"></p>
 
 ## Gameplay
 Local hot-seat, turn-based artillery game. Two teams of four worms take turns on a procedurally generated island. Each turn has a 45 s timer, random wind, and a few seconds to retreat after attacking. Worms take fall damage, drown in the water (or lava), and leave a gravestone when they die. The last team standing wins.
@@ -32,7 +32,6 @@ Each worm remembers its own weapon and grenade fuse between turns. Limited ammo 
 * **Build Tool:** `Premake`
 * **Backend:** `Raylib`
 * **Physics:** `Box2D` v3 (git submodule)
-* **Logging:** `spdlog`
 
 ## Download
 
