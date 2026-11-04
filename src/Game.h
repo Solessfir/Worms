@@ -1,8 +1,12 @@
 ﻿#pragma once
 
+#include <array>
 #include <cstdint>
+#include <random>
 #include <vector>
-#include "raylib/raylib.h"
+#include "Biome.h"
+#include "Physics.h"
+#include "Terrain.h"
 
 // Ref: https://github.com/raysan5/raylib/discussions/4636
 inline float GetRandomFloatValue(const float Min, const float Max)
@@ -20,67 +24,161 @@ enum class GameScreen : std::uint8_t
 
 enum class TurnPhase : std::uint8_t
 {
-    Aiming,
-    Firing,
-    Settling
+    Aiming,   // active worm moves and attacks
+    Retreat,  // attack is spent, a few seconds to run
+    Settling, // waiting for everything to come to rest
+    Deaths    // worms at 0 HP blow up one by one
+};
+
+enum class WeaponKind : std::uint8_t
+{
+    Rocket,
+    Grenade,
+    ClusterBomb,
+    Airstrike,
+    NinjaRope,
+    Teleport,
+    Shotgun,
+    Count
+};
+
+constexpr int WeaponCount = static_cast<int>(WeaponKind::Count);
+
+enum class AimMode : std::uint8_t
+{
+    Charge,  // hold to charge, release to throw
+    Instant, // fires on click along the aim line
+    Target   // fires on click at the cursor position
+};
+
+struct WeaponInfo
+{
+    const char* Name;
+    int StartAmmo; // -1 = unlimited
+    AimMode Mode;
+};
+
+const WeaponInfo& GetWeaponInfo(WeaponKind Kind);
+
+enum class WormMotion : std::uint8_t
+{
+    Idle,
+    Walking,
+    Airborne, // jumped or fell: no control until landing
+    Knocked,  // thrown by a blast: no control until it comes to rest
+    Roping
 };
 
 struct Worm
 {
-    Vector2 Position;
-    Vector2 Velocity;
-    int HP;
-    char Name[16];
-    float FacingDir;
-    bool OnGround;
-    float AimAngle;
-    bool Charging;
-    float ChargePower;
-    bool Alive;
-    float FlashSec;
+    b2BodyId Body = b2_nullBodyId;
+    std::uint32_t Id = 0;
+    char Name[16] = {};
+    int Team = 0;
+    int HP = 100;
+    bool Alive = true;
+    WormMotion Motion = WormMotion::Airborne;
+    bool Grounded = false;
+    float FacingDir = 1.f;
+    float AimAngle = 0.f;
+    WeaponKind Weapon = WeaponKind::Rocket; // remembered between this worm's turns
+    int FuseSeconds = 3;
+    float MoveInput = 0.f;
+    float FallSpeed = 0.f;   // m/s, peak downward speed while airborne, for fall damage
+    float RestTimer = 0.f;   // time spent nearly motionless while airborne
+    float SettleTimer = 0.f; // time spent resting after being knocked
+    float FlashSec = 0.f;
+    float AnimTime = 0.f;
+    float SpinAngle = 0.f;   // purely visual tumble while knocked
+    Vector2 Position{};      // physics state at the last step, gameplay reads this
+    Vector2 PrevPosition{};
+    Vector2 DrawPosition{};  // interpolated between steps, rendering reads this
+    Vector2 Velocity{};
 
-    // Global data
     static constexpr int MaxHP = 100;
-    static constexpr float FlashDuration = 0.15f;
-    static constexpr float Radius = 20.f;
+    static constexpr float Radius = 9.f;
+    static constexpr float FlashDuration = 0.2f;
 };
 
-struct TerrainBlock
-{
-    Vector2 Position;
-    float Width;
-    float Height;
-    int HitsLeft;
-    bool Alive;
-    float DeathSec;
-    Color Tint;
+constexpr int TeamCount = 2;
+constexpr int WormsPerTeam = 4;
 
-    // Global data
-    static constexpr float DeathDuration = 0.18f;
+struct Team
+{
+    char Name[16] = {};
+    Color Tint{};
+    int NextWorm = 0; // index into this team's worms for round robin
+    std::array<int, WeaponCount> Ammo{};
+};
+
+enum class ProjectileKind : std::uint8_t
+{
+    Rocket,
+    Grenade,
+    ClusterBomb,
+    Bomblet,
+    AirstrikeBomb
 };
 
 struct Projectile
 {
-    Vector2 Position;
-    Vector2 Velocity;
-    bool Active;
-
-    // Global data
-    static constexpr float Radius = 8.f;
+    ProjectileKind Kind = ProjectileKind::Rocket;
+    b2BodyId Body = b2_nullBodyId;
+    std::uint32_t Id = 0;
+    float Fuse = 0.f;     // seconds, <= 0 means impact fused
+    bool Detonate = false;
+    Vector2 Position{};
+    Vector2 Velocity{};
+    float Angle = 0.f;
+    Vector2 PrevPosition{};
+    float PrevAngle = 0.f;
+    Vector2 DrawPosition{};
+    float DrawAngle = 0.f;
+    bool UsesWind = false;
 };
 
-struct SimState
+struct Debris
 {
-    Worm Worms[2];
-    std::vector<TerrainBlock> Terrain;
-    Projectile Shot;
-    int CurrentPlayer;
-    TurnPhase Phase;
-    float SettleTimer;
+    b2BodyId Body = b2_nullBodyId;
+    std::uint32_t Id = 0;
+    int Width = 0;
+    int Height = 0;
+    std::vector<std::uint8_t> Solid;
+    std::vector<Color> Pixels;
+    Texture2D Texture{};
+    float RestTimer = 0.f;
+    float Age = 0.f;
+    Vector2 Position{};
+    float Angle = 0.f;
+    Vector2 PrevPosition{};
+    float PrevAngle = 0.f;
+    Vector2 DrawPosition{};
+    float DrawAngle = 0.f;
+};
+
+struct Grave
+{
+    b2BodyId Body = b2_nullBodyId;
+    std::uint32_t Id = 0;
+    Color Tint{};
+    Vector2 Position{};
+    float Angle = 0.f;
+    Vector2 PrevPosition{};
+    float PrevAngle = 0.f;
+    Vector2 DrawPosition{};
+    float DrawAngle = 0.f;
+};
+
+enum class ParticleKind : std::uint8_t
+{
+    Spark, // additive-looking glow, no gravity
+    Smoke, // grows and fades, drifts up
+    Dirt   // falls with gravity
 };
 
 struct Particle
 {
+    ParticleKind Kind;
     Vector2 Position;
     Vector2 Velocity;
     Color Tint;
@@ -89,20 +187,11 @@ struct Particle
     float MaxLifetime;
 };
 
-struct Playfield
+struct Tracer
 {
-    float X;
-    float Y;
-    float Width;
-    float Height;
-};
-
-struct BackgroundParticle
-{
-    Vector2 Position;
-    float Speed;
-    float Radius;
-    float Alpha;
+    Vector2 From;
+    Vector2 To;
+    float Lifetime;
 };
 
 struct FloatingText
@@ -116,48 +205,107 @@ struct FloatingText
     bool Shake;
 };
 
+struct GameCamera
+{
+    Vector2 Target{};
+    float Zoom = 1.f;     // user zoom on top of the window fit
+    bool Manual = false;  // middle mouse panned, stop following until something new happens
+    Vector2 Focus{};
+};
+
+struct Match
+{
+    b2WorldId World = b2_nullWorldId;
+    b2BodyId AnchorBody = b2_nullBodyId; // static body the rope attaches to, chunk bodies get rebuilt under it
+    TerrainMap Terrain;
+    BiomeKind Biome = BiomeKind::Meadow;
+    Backdrop Background;
+    float LiquidLevel = 0.f;
+    std::mt19937 Rng;
+
+    std::vector<Worm> Worms;
+    std::array<Team, TeamCount> Teams;
+    std::vector<Projectile> Projectiles;
+    std::vector<Debris> DebrisPieces;
+    std::vector<Grave> Graves;
+    std::uint32_t NextId = 1;
+
+    int CurrentTeam = 0;
+    int CurrentWorm = 0;
+    TurnPhase Phase = TurnPhase::Aiming;
+    float TurnTimer = 0.f;
+    float PhaseTimer = 0.f;
+    float Wind = 0.f; // m/s^2 applied to wind-affected projectiles
+    int TurnNumber = 0;
+
+    WeaponKind Weapon = WeaponKind::Rocket;
+    bool Charging = false;
+    float Charge = 0.f;
+    int FuseSeconds = 3;
+    int ShotsLeft = 0;
+
+    b2JointId Rope = b2_nullJointId;
+    Vector2 RopeAnchor{};
+
+    float PhysicsAccumulator = 0.f;
+    float Time = 0.f;
+    std::uint32_t FollowProjectile = 0; // camera tracks this projectile id while it lives
+};
+
+struct GameSounds
+{
+    Sound Explosion{};
+};
+
 struct GameState
 {
-    GameScreen Screen;
-    Playfield Field;
-    SimState Sim;
+    GameScreen Screen = GameScreen::MainMenu;
+    Match Game;
+    GameCamera Camera;
     std::vector<Particle> Particles;
-    std::vector<BackgroundParticle> BackgroundParticles;
+    std::vector<Tracer> Tracers;
     std::vector<FloatingText> FloatingTexts;
-    float ShakeScale;
-    int Winner; // -1 = no winner yet, otherwise 0 or 1
-    bool WaitForMouseRelease; // true right after entering Game, until the menu/confirm click is released
+    float ShakeScale = 0.f;
+    int Winner = -1; // team index, -2 = draw
+    bool WaitForMouseRelease = false;
+    bool WeaponPanelOpen = false;
+    bool Paused = false;
+    int MenuBiome = -1; // -1 = random
+    GameSounds Sounds;
 };
 
-void UpdateWorm(Worm& W, const std::vector<TerrainBlock>& Terrain, const float DeltaTime, const float PlayfieldWidth, const bool AcceptInput);
+constexpr int MapWidth = 3200;
+constexpr int MapHeight = 1500;
 
-bool UpdateWormAim(Worm& W, const Vector2 MouseVirtualPos, const float DeltaTime, Vector2& OutFireVelocity);
+void StartMatch(GameState& State, std::uint32_t Seed, BiomeKind Biome);
 
-void UpdateProjectile(Projectile& Shot, const float DeltaTime);
+void DestroyMatch(Match& Game);
 
-struct ExplosionResult
-{
-    std::vector<int> HitTerrainIndices;
-    std::vector<int> HitWormIndices;
-    Vector2 Center;
-};
+void UpdateGameplay(GameState& State, float DeltaTime);
 
-ExplosionResult ApplyExplosionDamage(SimState& Sim, const Vector2 Center, const float Radius, const int MaxDamage);
+void UpdateEffects(GameState& State, float DeltaTime);
 
-bool CheckWormBelowField(Worm& W, const float PlayfieldHeight);
+// World transform for this frame: window fit * user zoom, centered on the camera target, without shake
+Camera2D GetWorldCamera(const GameState& State);
 
-std::vector<Vector2> SimulateTrajectory(const Vector2 Origin, const Vector2 Velocity, const float TimeStep, const int MaxPoints);
+Rectangle GetVisibleWorld(const Camera2D& View);
 
-void LoadLevelFromPath(SimState& Sim, const char* Path, const float PlayfieldWidth, const float PlayfieldHeight);
+const Worm* GetActiveWorm(const Match& Game);
 
-void SpawnParticles(std::vector<Particle>& Particles, const Vector2& Position, const Color& Tint, const int Count);
+// Shared by gameplay and HUD so the preview matches what will fire
+float GetLaunchSpeed(WeaponKind Weapon, float Charge);
 
-void UpdateParticles(std::vector<Particle>& Particles, const float DeltaTime);
+// Screen-space slot in the weapon panel, shared by input hit-testing and drawing
+Rectangle GetWeaponSlotRect(int Index);
 
-void SpawnFloatingText(std::vector<FloatingText>& Texts, const Vector2 Position, const char* Text, const Color Tint, const int FontSize, const float Lifetime, const bool Shake);
+// HUD scale relative to a 1080p window
+float GetUiScale();
 
-void UpdateFloatingTexts(std::vector<FloatingText>& Texts, const float DeltaTime);
+// Screen-space centered button column, shared by the main menu and the pause menu
+Rectangle GetMenuButtonRect(int Index);
 
-void InitBackgroundParticles(std::vector<BackgroundParticle>& BackgroundParticles, const int Count, const float Width, const float Height);
+const char* GetMenuBiomeName(int MenuBiome);
 
-void UpdateBackgroundParticles(std::vector<BackgroundParticle>& BackgroundParticles, const float DeltaTime, const float Width, const float Height);
+void SpawnFloatingText(std::vector<FloatingText>& Texts, Vector2 Position, const char* Text, Color Tint, int FontSize, float Lifetime, bool Shake);
+
+void RenderFrame(const GameState& State);
