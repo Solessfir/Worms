@@ -54,6 +54,37 @@ group "vendor"
         filter "configurations:Release"
             runtime "Release"
             optimize "On"
+
+    project "box2d"
+        kind "StaticLib"
+        language "C"
+        cdialect "C17"
+        staticruntime "off"
+        warnings "off"
+
+        targetdir ("bin/" .. outputdir .. "/%{prj.name}")
+        objdir ("bin/" .. outputdir .. "/%{prj.name}/obj")
+        files { "vendor/box2d/src/**.c", "vendor/box2d/src/**.h", "vendor/box2d/include/**.h" }
+        includedirs { "vendor/box2d/include", "vendor/box2d/src" }
+
+        filter "system:windows"
+            systemversion "latest"
+
+        -- Mirrors Box2D's CMake: the wide solver is AVX2 and picked at runtime, everything else stays SSE2
+        filter { "system:windows", "files:vendor/box2d/src/contact_solver_w8.c" }
+            buildoptions { "/arch:AVX2" }
+
+        -- Box2D's CMake disables FMA contraction so results match across compilers and platforms
+        filter "system:linux"
+            buildoptions { "-ffp-contract=off" }
+
+        filter "configurations:Debug"
+            runtime "Debug"
+            symbols "On"
+
+        filter "configurations:Release"
+            runtime "Release"
+            optimize "On"
 group ""
 
 project "Worms"
@@ -74,8 +105,8 @@ project "Worms"
     }
 
     includedirs { "src" }
-    externalincludedirs { "vendor" }
-    dependson { "raylib" }
+    externalincludedirs { "vendor", "vendor/box2d/include" }
+    dependson { "raylib", "box2d" }
 
     filter "system:windows"
         systemversion "latest"
@@ -83,7 +114,7 @@ project "Worms"
         -- /FORCE:MULTIPLE picks raylib's at link time, /IGNORE:4006 disables the "second definition ignored" warning
         -- https://github.com/raysan5/raylib/issues/729
         defines { "NOGDI", "NOUSER" }
-        links { "raylib", "winmm" }
+        links { "raylib", "box2d", "winmm" }
         linkoptions { "/FORCE:MULTIPLE", "/IGNORE:4006" }
         buildoptions {
             -- Flags taken from: https://learn.microsoft.com/en-us/cpp/build/reference/compiler-options-listed-alphabetically?view=msvc-170
@@ -96,7 +127,7 @@ project "Worms"
 
     filter "system:linux"
         -- raylib's required system libs on desktop Linux (Wayland backend; GLFW dlopens libwayland/libxkbcommon)
-        links { "raylib", "GL", "m", "pthread", "dl", "rt" }
+        links { "raylib", "box2d", "GL", "m", "pthread", "dl", "rt" }
         buildoptions {
             -- Flags taken from: https://gcc.gnu.org/onlinedocs/gcc/Warning-Options.html
             "-Wall",

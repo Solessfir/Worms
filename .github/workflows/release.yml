@@ -12,6 +12,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: true
       - uses: microsoft/setup-msbuild@v2
       - run: vendor\Premake\Windows\premake5.exe --file=premake.lua vs2022
         shell: cmd
@@ -25,6 +27,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: true
       - run: sudo apt-get update && sudo apt-get install -y libgl1-mesa-dev libwayland-dev wayland-protocols libxkbcommon-dev
       - run: ./Setup.sh
       - run: make config=release -j$(nproc)
